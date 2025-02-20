@@ -2,9 +2,11 @@
   "name": "server",
   "version": "1.0.0",
   "description": "Serverless functions for Kepner-Tregoe app",
-  "scripts": {
-  },
+  "scripts": {},
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.48.1"
+  }
 }
