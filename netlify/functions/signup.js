@@ -1,13 +1,25 @@
 const { createClient } = require('@supabase/supabase-js');
 
 exports.handler = async (event) => {
-  const supabaseUrl = 'https://bqumdvfrgjcwcnbdbrps.supabase.co';
-  const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxdW1kdmZyZ2pjd2NuYmRicnBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk4ODQ3NDIsImV4cCI6MjA1NTQ2MDc0Mn0.1u8pE3cLH6YjQIW1aiYUbyGiZ8__tb-ybChNf961fuE';
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return {
+      statusCode: 500,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+      body: JSON.stringify({ error: "Supabase environment variables not set" }),
+    };
+  }
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
   console.log("Supabase client created");
 
-  // Handle the OPTIONS method for preflight requests
+    // Handle the OPTIONS method for preflight requests
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 204, // No Content
