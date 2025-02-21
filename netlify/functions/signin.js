@@ -1,107 +1,108 @@
-const { createClient } = require('@supabase/supabase-js');
-const cookie = require('cookie');
+const { createClient } = require("@supabase/supabase-js");
+const cookie = require("cookie");
+const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
+
+// Debug flag
+const DEBUG = true;
 
 exports.handler = async (event) => {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
+  if (DEBUG) console.log("Handler invoked");
+
   if (!supabaseUrl || !supabaseAnonKey) {
+    if (DEBUG) console.log("Supabase environment variables not set");
     return {
       statusCode: 500,
-      headers: {
-        "Access-Control-Allow-Origin": "http://localhost:3000", // Update to match your frontend URL
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Access-Control-Allow-Credentials": "true",
-      },
+      headers: { ...CORS_HEADERS(event) },
       body: JSON.stringify({ error: "Supabase environment variables not set" }),
     };
   }
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  
+  if (DEBUG) console.log("Supabase client created");
 
-  // Handle CORS preflight request
+  // Handle OPTIONS preflight requests
   if (event.httpMethod === "OPTIONS") {
+    if (DEBUG) {
+      console.log("OPTIONS request received");
+      console.log(CORS_HEADERS(event))
+    }
     return {
       statusCode: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "http://localhost:3000", // Update if needed
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Access-Control-Allow-Credentials": "true",
-      },
+      headers: { ...CORS_HEADERS(event) },
       body: "",
     };
   }
 
   if (event.httpMethod === "POST") {
     try {
-      const { email, password } = JSON.parse(event.body);
+      if (DEBUG) console.log("POST request received");
 
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      // Parse request body
+      const { email, password } = JSON.parse(event.body);
+      if (DEBUG) console.log("Parsed email:", email);
+
+      // Attempt to sign in user
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (DEBUG) console.log("Supabase sign-in attempt result:", { data, error });
 
       if (error) {
+        if (DEBUG) console.log("Supabase signin error:", error);
         return {
           statusCode: error.status || 500,
-          headers: {
-            "Access-Control-Allow-Origin": "http://localhost:3000",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-            "Access-Control-Allow-Credentials": "true",
-          },
+          headers: { ...CORS_HEADERS(event) },
           body: JSON.stringify({ error: error.message || "Supabase signin error" }),
         };
       }
 
-      const projectRef = supabaseUrl.split('.')[0].replace('https://', '');
+      // Get project reference and set session cookie
+      const projectRef = supabaseUrl.split(".")[0].replace("https://", "");
       const sessionCookieName = `sb-${projectRef}-auth-token`;
 
-      // Set the authentication cookie
       const cookieString = cookie.serialize(sessionCookieName, data.session.access_token, {
-        httpOnly: false, // Allow access via JavaScript
+        httpOnly: true, // Prevent JavaScript access
         secure: process.env.NODE_ENV === "production", // Secure only in production
-        sameSite: 'Lax', // Needed for cross-origin cookie sharing
-        maxAge: data.session.expires_in, // Use session expiration time
-        path: '/' // Make cookie available across all routes
+        sameSite: "None", // Allows cross-origin authentication
+        maxAge: data.session.expires_in, // Set expiration
+        path: "/",
       });
+
+      if (DEBUG) console.log("Cookie set:", cookieString);
 
       return {
         statusCode: 200,
         headers: {
-          "Access-Control-Allow-Origin": "http://localhost:3000",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-          "Access-Control-Allow-Credentials": "true",
-          "Set-Cookie": cookieString, // Setting the auth cookie
+          ...CORS_HEADERS(event),
+          "Set-Cookie": cookieString,
         },
         body: JSON.stringify({
           message: "Sign in successful",
           user: data.user,
           session: data.session,
+          accessToken: data.session.access_token, // Add access token to response
         }),
       };
     } catch (error) {
+      if (DEBUG) console.log("Error during POST request:", error);
       return {
         statusCode: 400,
-        headers: {
-          "Access-Control-Allow-Origin": "http://localhost:3000",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-          "Access-Control-Allow-Credentials": "true",
-        },
+        headers: { ...CORS_HEADERS(event) },
         body: JSON.stringify({ error: "Invalid JSON in request body" }),
       };
     }
   }
 
+  if (DEBUG) console.log("Method not allowed");
   return {
     statusCode: 405,
-    headers: {
-      "Access-Control-Allow-Origin": "http://localhost:3000",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-      "Access-Control-Allow-Credentials": "true",
-    },
+    headers: { ...CORS_HEADERS(event) },
     body: JSON.stringify({ error: "Method Not Allowed" }),
   };
 };

@@ -1,20 +1,20 @@
 =======
 netlify/functions/ai.js
 const { createClient } = require('@supabase/supabase-js');
+const { getSessionToken } = require('./getSessionToken');
 
 // Helper function to get the session token from cookies
-function getSessionToken(event) {
-    const cookieString = event.headers.cookie || '';
-    const cookies = cookieString.split(';').reduce((acc, cookie) => {
-        const [key, value] = cookie.trim().split('=');
-        acc[key] = value;
-        return acc;
-    }, {});
-
-    const projectRef = process.env.SUPABASE_URL.split('.')[0].replace('https://', '');
-    const sessionCookieName = `sb-${projectRef}-auth-token`;
-    return cookies[sessionCookieName];
-}
+// function getSessionToken() {
+//     const cookies = document.cookie.split("; ").reduce((acc, cookie) => {
+//       const [key, ...valueParts] = cookie.split("="); // Handle values containing '='
+//       acc[key] = valueParts.join("="); // Join parts back to reconstruct the full token
+//       return acc;
+//     }, {});
+  
+//     const projectRef = process.env.SUPABASE_URL.split('.')[0].replace('https://', '');
+//     const sessionCookieName = `sb-${projectRef}-auth-token`;
+//     return cookies[sessionCookieName] || null;
+// }
 
 exports.handler = async (event) => {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -279,9 +279,10 @@ exports.handler = async (event) => {
     return {
       statusCode: 500,
       headers: {
-        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Origin": "http://localhost:3000", // Update to match your frontend URL
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Credentials": "true",
       },
       body: JSON.stringify({ error: "Supabase environment variables not set" }),
     };
@@ -289,13 +290,15 @@ exports.handler = async (event) => {
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+  // Handle CORS preflight request
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 204,
       headers: {
-        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Origin": "http://localhost:3000", // Update if needed
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Credentials": "true",
       },
       body: "",
     };
@@ -311,9 +314,10 @@ exports.handler = async (event) => {
         return {
           statusCode: error.status || 500,
           headers: {
-            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Origin": "http://localhost:3000",
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type",
+            "Access-Control-Allow-Credentials": "true",
           },
           body: JSON.stringify({ error: error.message || "Supabase signin error" }),
         };
@@ -322,38 +326,38 @@ exports.handler = async (event) => {
       const projectRef = supabaseUrl.split('.')[0].replace('https://', '');
       const sessionCookieName = `sb-${projectRef}-auth-token`;
 
-      // Serialize the cookie for setting in the response header
+      // Set the authentication cookie
       const cookieString = cookie.serialize(sessionCookieName, data.session.access_token, {
-        httpOnly: false, // Allow client-side JavaScript to access the cookie
-        secure: false,   // Set to true in production (HTTPS)
-        sameSite: 'Strict',
-        maxAge: data.session.expires_in, // Use the session's expiration time
-        path: '/', // Cookie is valid for all paths
-        domain: 'localhost'
+        httpOnly: false, // Allow access via JavaScript
+        secure: process.env.NODE_ENV === "production", // Secure only in production
+        sameSite: 'Lax', // Needed for cross-origin cookie sharing
+        maxAge: data.session.expires_in, // Use session expiration time
+        path: '/' // Make cookie available across all routes
       });
 
       return {
         statusCode: 200,
         headers: {
-          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Origin": "http://localhost:3000",
           "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
           "Access-Control-Allow-Headers": "Content-Type",
-          'Set-Cookie': cookieString, // Set the cookie
+          "Access-Control-Allow-Credentials": "true",
+          "Set-Cookie": cookieString, // Setting the auth cookie
         },
         body: JSON.stringify({
           message: "Sign in successful",
           user: data.user,
           session: data.session,
-          projectRef: projectRef,
         }),
       };
     } catch (error) {
       return {
         statusCode: 400,
         headers: {
-          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Origin": "http://localhost:3000",
           "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type"
+          "Access-Control-Allow-Headers": "Content-Type",
+          "Access-Control-Allow-Credentials": "true",
         },
         body: JSON.stringify({ error: "Invalid JSON in request body" }),
       };
@@ -362,12 +366,20 @@ exports.handler = async (event) => {
 
   return {
     statusCode: 405,
+    headers: {
+      "Access-Control-Allow-Origin": "http://localhost:3000",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Credentials": "true",
+    },
     body: JSON.stringify({ error: "Method Not Allowed" }),
   };
 };
 
 netlify/functions/signup.js
-const { createClient } = require('@supabase/supabase-js');
+const { createClient } = require("@supabase/supabase-js");
+
+const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
 
 exports.handler = async (event) => {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -376,11 +388,7 @@ exports.handler = async (event) => {
   if (!supabaseUrl || !supabaseAnonKey) {
     return {
       statusCode: 500,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
+      headers: { ...CORS_HEADERS(event) },
       body: JSON.stringify({ error: "Supabase environment variables not set" }),
     };
   }
@@ -388,15 +396,11 @@ exports.handler = async (event) => {
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
   console.log("Supabase client created");
 
-    // Handle the OPTIONS method for preflight requests
+  // Handle the OPTIONS method for preflight requests
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 204, // No Content
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
+      headers: { ...CORS_HEADERS(event) },
       body: "",
     };
   }
@@ -416,22 +420,16 @@ exports.handler = async (event) => {
         console.error("Supabase error:", error);
         return {
           statusCode: error.status || 500,
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
-          },
-          body: JSON.stringify({ error: error.message || "Supabase signup error" }),
+          headers: { ...CORS_HEADERS(event) },
+          body: JSON.stringify({
+            error: error.message || "Supabase signup error",
+          }),
         };
       }
 
       return {
         statusCode: 200,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
-        },
+        headers: { ...CORS_HEADERS(event) },
         body: JSON.stringify({
           message: "Sign up successful",
           user: data.user,
@@ -441,11 +439,7 @@ exports.handler = async (event) => {
       console.error("Error in signup function:", error);
       return {
         statusCode: 400,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type"
-        },
+        headers: { ...CORS_HEADERS(event) },
         body: JSON.stringify({ error: "Invalid JSON in request body" }),
       };
     }
@@ -809,23 +803,29 @@ exports.handler = async (event) => {
   };
 };
 
-package.json
-{
-  "name": "server",
-  "version": "1.0.0",
-  "description": "Serverless functions for Kepner-Tregoe app",
-  "scripts": {},
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@supabase/supabase-js": "^2.48.1",
-    "cookie": "^1.0.2"
-  }
-}
-=======
-netlify.toml
-[build]
-  functions = "netlify/functions"
-=======
+utils/getSessionToken.js
+module.exports.getSessionToken = function (event) {
+  const cookieString = event.headers.cookie || '';
+  const cookies = cookieString.split('; ').reduce((acc, cookie) => {
+    const [key, ...valueParts] = cookie.split('=');
+    acc[key] = valueParts.join('=');
+    return acc;
+  }, {});
+
+  const projectRef = process.env.SUPABASE_URL.split('.')[0].replace('https://', '');
+  const sessionCookieName = `sb-${projectRef}-auth-token`;
+
+  return cookies[sessionCookieName] || null;
+};
+
+utils/CORS_HEADERS.js
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+module.exports = { CORS_HEADERS };
+
+
 =======
