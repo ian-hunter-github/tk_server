@@ -1,5 +1,4 @@
 const { createClient } = require('@supabase/supabase-js');
-const { createClient } = require('@supabase/supabase-js');
 const { getSessionToken } = require('../../utils/getSessionToken'); // ✅ Use shared utility
 const { CORS_HEADERS } = require('../../utils/CORS_HEADERS');
 

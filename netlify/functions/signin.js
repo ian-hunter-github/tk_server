@@ -94,7 +94,7 @@ exports.handler = async (event) => {
       return {
         statusCode: 400,
         headers: { ...CORS_HEADERS(event) },
-        body: JSON.stringify({ error: "Invalid JSON in request body" }),
+        body: JSON.stringify({ error: "Invalid request" }),
       };
     }
   }

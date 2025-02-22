@@ -1,0 +1,1856 @@
+=======
+netlify/functions/admin.js
+const { createClient } = require('@supabase/supabase-js');
+const { getSessionToken } = require('../../utils/getSessionToken');
+const { CORS_HEADERS } = require('../../utils/CORS_HEADERS');
+
+// Debug flag
+const DEBUG = true;
+
+exports.handler = async (event) => {
+  if (DEBUG) console.log("Handler invoked");
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // ✅ Secure admin key
+
+  if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
+    if (DEBUG) console.log("Supabase environment variables not set");
+    return {
+      statusCode: 500,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify({ error: "Supabase environment variables not set" }),
+    };
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } }); // ✅ Admin client
+
+  // Handle OPTIONS preflight requests
+  if (event.httpMethod === "OPTIONS") {
+    if (DEBUG) console.log("OPTIONS request received");
+    return {
+      statusCode: 204,
+      headers: { ...CORS_HEADERS(event) },
+      body: "",
+    };
+  }
+
+  // ✅ Get session token securely
+  const sessionToken = getSessionToken(event);
+  if (!sessionToken) {
+    if (DEBUG) console.log("No session token found");
+    return {
+      statusCode: 401,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify({ error: "Unauthorized" }),
+    };
+  }
+
+  // ✅ Securely retrieve user from Supabase
+  const { data: user, error } = await supabase.auth.getUser(sessionToken);
+  if (error || !user) {
+    if (DEBUG) console.log("Invalid session token");
+    return {
+      statusCode: 401,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify({ error: "Invalid session token" }),
+    };
+  }
+
+  // ✅ Check if the user has an "admin" role
+  const { data: userRole, error: roleError } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', user.id)
+    .single();
+
+  if (roleError || !userRole || userRole.role !== 'admin') {
+    if (DEBUG) console.log("Access denied: Admins only");
+    return {
+      statusCode: 403,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify({ error: "Access denied: Admins only" }),
+    };
+  }
+
+  // ✅ Handle GET request - Retrieve users with pagination
+  if (event.httpMethod === "GET") {
+    try {
+      const { limit = 10, offset = 0 } = event.queryStringParameters || {};
+      if (DEBUG) console.log("GET request received with limit:", limit, "offset:", offset);
+
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .range(Number(offset), Number(offset) + Number(limit) - 1);
+
+      if (error) throw error;
+
+      return {
+        statusCode: 200,
+        headers: { ...CORS_HEADERS(event) },
+        body: JSON.stringify({ users: data }),
+      };
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      if (DEBUG) console.log("Error fetching users:", error);
+      return {
+        statusCode: 500,
+        headers: { ...CORS_HEADERS(event) },
+        body: JSON.stringify({ error: "Failed to fetch users" }),
+      };
+    }
+  }
+
+  // ✅ Handle DELETE request - Delete user (admin only)
+  if (event.httpMethod === "DELETE") {
+    try {
+      const { id } = JSON.parse(event.body);
+      if (DEBUG) console.log("DELETE request received for user ID:", id);
+
+      if (!id) {
+        if (DEBUG) console.log("User ID is required");
+        return {
+          statusCode: 400,
+          headers: { ...CORS_HEADERS(event) },
+          body: JSON.stringify({ error: "User ID is required" }),
+        };
+      }
+
+      const { error } = await supabaseAdmin.auth.admin.deleteUser(id); // ✅ Requires Service Role Key
+
+      if (error) throw error;
+
+      return {
+        statusCode: 200,
+        headers: { ...CORS_HEADERS(event) },
+        body: JSON.stringify({ message: "User deleted successfully" }),
+      };
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      if (DEBUG) console.log("Error deleting user:", error);
+      return {
+        statusCode: 500,
+        headers: { ...CORS_HEADERS(event) },
+        body: JSON.stringify({ error: "Failed to delete user" }),
+      };
+    }
+  }
+
+  if (DEBUG) console.log("Method not allowed");
+  return {
+    statusCode: 405,
+    headers: { ...CORS_HEADERS(event) },
+    body: JSON.stringify({ error: "Method Not Allowed" }),
+  };
+};
+=======
+netlify/functions/ai.js
+const { createClient } = require('@supabase/supabase-js');
+const { createClient } = require('@supabase/supabase-js');
+const { getSessionToken } = require('../../utils/getSessionToken'); // ✅ Use shared utility
+const { CORS_HEADERS } = require('../../utils/CORS_HEADERS');
+
+// Debug flag
+const DEBUG = true;
+
+exports.handler = async (event) => {
+  if (DEBUG) console.log("Handler invoked");
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    if (DEBUG) console.log("Supabase environment variables not set");
+    return {
+      statusCode: 500,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify({ error: "Supabase environment variables not set" }),
+    };
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+  // Handle OPTIONS preflight requests
+  if (event.httpMethod === "OPTIONS") {
+    if (DEBUG) console.log("OPTIONS request received");
+    return {
+      statusCode: 204,
+      headers: { ...CORS_HEADERS(event) },
+      body: "",
+    };
+  }
+
+  // ✅ Get session token securely
+  const sessionToken = getSessionToken(event);
+  if (!sessionToken) {
+    if (DEBUG) console.log("No session token found");
+    return {
+      statusCode: 401,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify({ error: "Unauthorized" }),
+    };
+  }
+
+  // ✅ Securely retrieve user from Supabase
+  const { data: user, error } = await supabase.auth.getUser(sessionToken);
+  if (error || !user) {
+    if (DEBUG) console.log("Invalid session token");
+    return {
+      statusCode: 401,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify({ error: "Invalid session token" }),
+    };
+  }
+
+  const userId = user.id; // ✅ Secure user ID extraction
+
+  // ✅ Extract the path
+  const path = event.rawPath.replace('/.netlify/functions/ai', ''); // More robust path extraction
+
+  if (event.httpMethod === "POST") {
+    if (path === '/generate-criteria') {
+      try {
+        const { concept } = JSON.parse(event.body);
+        if (DEBUG) console.log("Generating criteria for:", concept);
+
+        // Placeholder response (replace with actual AI logic)
+        return {
+          statusCode: 200,
+          headers: { ...CORS_HEADERS(event) },
+          body: JSON.stringify({ criteria: [`Criteria 1 for ${concept}`, `Criteria 2 for ${concept}`] }),
+        };
+      } catch (error) {
+        console.error("Error processing request:", error);
+        if (DEBUG) console.log("Error processing request:", error);
+        return {
+          statusCode: 400,
+          headers: { ...CORS_HEADERS(event) },
+          body: JSON.stringify({ error: "Invalid request data" }),
+        };
+      }
+    } 
+
+    else if (path === '/evaluate-alternative') {
+      try {
+        const { alternative, criteria } = JSON.parse(event.body);
+        if (DEBUG) console.log("Evaluating alternative:", alternative, "with criteria:", criteria);
+
+        let totalScore = 0;
+        for (const criterion of criteria) {
+          if (criterion.score < 1 || criterion.score > 5 || criterion.weight < 1 || criterion.weight > 10) {
+            if (DEBUG) console.log("Invalid criterion:", criterion);
+            return {
+              statusCode: 400,
+              headers: { ...CORS_HEADERS(event) },
+              body: JSON.stringify({ error: `Invalid criterion: ${criterion.name}` }),
+            };
+          }
+          totalScore += criterion.score * criterion.weight;
+        }
+
+        return {
+          statusCode: 200,
+          headers: { ...CORS_HEADERS(event) },
+          body: JSON.stringify({ evaluation: totalScore }),
+        };
+      } catch (error) {
+        console.error("Error processing request:", error);
+        if (DEBUG) console.log("Error processing request:", error);
+        return {
+          statusCode: 400,
+          headers: { ...CORS_HEADERS(event) },
+          body: JSON.stringify({ error: "Invalid request data" }),
+        };
+      }
+    } 
+
+    else if (path === '/predict-scores') {
+      try {
+        const { alternative, newCriteria, existingCriteria } = JSON.parse(event.body);
+        if (DEBUG) console.log("Predicting scores for:", alternative, "with new criteria:", newCriteria, "and existing criteria:", existingCriteria);
+
+        // Placeholder response (replace with actual AI logic)
+        return {
+          statusCode: 200,
+          headers: { ...CORS_HEADERS(event) },
+          body: JSON.stringify({ prediction: `Prediction for ${alternative} with new criteria ${newCriteria.join(', ')} and existing criteria ${existingCriteria.join(', ')}` }),
+        };
+      } catch (error) {
+        console.error("Error processing request:", error);
+        if (DEBUG) console.log("Error processing request:", error);
+        return {
+          statusCode: 400,
+          headers: { ...CORS_HEADERS(event) },
+          body: JSON.stringify({ error: "Invalid request data" }),
+        };
+      }
+    } 
+
+    else {
+      if (DEBUG) console.log("Endpoint not found");
+      return {
+        statusCode: 404,
+        headers: { ...CORS_HEADERS(event) },
+        body: JSON.stringify({ error: "Endpoint not found" }),
+      };
+    }
+  }
+
+  if (DEBUG) console.log("Method not allowed");
+  return {
+    statusCode: 405,
+    headers: { ...CORS_HEADERS(event) },
+    body: JSON.stringify({ error: "Method Not Allowed" }),
+  };
+};
+=======
+netlify/functions/choices.js
+const { createSupabaseClient, getAuthenticatedUser } = require("../../utils/supabaseClient");
+const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
+
+const DEBUG = true;
+
+// Handle GET requests (Retrieve choices for a project)
+const handleGetChoices = async (supabase, projectId) => {
+  const { data, error } = await supabase
+    .from('choices')
+    .select('*')
+    .eq('project_id', projectId);
+  if (error) throw new Error('Failed to fetch choices: ' + error.message);
+  return data;
+};
+
+// Handle POST requests (Create new choices)
+const handleCreateChoices = async (supabase, body, userId) => {
+  const { project_id, choices } = JSON.parse(body);
+
+  if (!project_id || !choices || !Array.isArray(choices)) {
+    throw new Error('Invalid request body: project_id and choices array are required');
+  }
+
+  const formattedChoices = choices.map(({ description, disqualified }) => ({
+    project_id,
+    description,
+    disqualified: disqualified || false, // Default to false if not provided
+    created_by: userId
+  }));
+
+  const { data, error } = await supabase
+    .from('choices')
+    .insert(formattedChoices)
+    .select();
+
+  if (error) throw new Error('Failed to create choices: ' + error.message);
+  return data;
+};
+
+// Handle PUT requests (Update a choice)
+const handleUpdateChoice = async (supabase, choiceId, body, userId) => {
+  const { description, disqualified } = JSON.parse(body);
+
+  if (description === undefined && disqualified === undefined) {
+    throw new Error('Invalid request body: at least one of description or disqualified must be provided');
+  }
+
+  const updateData = {"created_by": userId};
+  if (description !== undefined) {
+      updateData.description = description;
+  }
+  if (disqualified !== undefined) {
+      updateData.disqualified = disqualified;
+  }
+
+  const { data, error } = await supabase
+    .from('choices')
+    .update(updateData)
+    .eq('id', choiceId)
+    .select();
+
+  if (error) throw new Error('Failed to update choice: ' + error.message);
+  if (data.length === 0) throw new Error('Choice not found');
+  return data[0];
+};
+
+// Handle DELETE requests (Delete a choice)
+const handleDeleteChoice = async (supabase, choiceId) => {
+  const { error } = await supabase
+    .from('choices')
+    .delete()
+    .eq('id', choiceId);
+
+  if (error) throw new Error('Failed to delete choice: ' + error.message);
+  return { message: 'Choice deleted successfully' };
+};
+
+exports.handler = async (event) => {
+  try {
+    if (DEBUG) console.log(`${event.httpMethod} request received`);
+
+    // Handle OPTIONS preflight request
+    if (event.httpMethod === 'OPTIONS') {
+      return { statusCode: 204, headers: { ...CORS_HEADERS(event) }, body: '' };
+    }
+
+    // Initialize Supabase client and authenticate user
+    const supabase = createSupabaseClient(event);
+    const userId = await getAuthenticatedUser(supabase); // Ensure user is authenticated
+
+    let projectId;
+    const choiceId = event.pathParameters?.id;
+
+    // Handle different request types
+    let responseData;
+    let statusCode = 200;
+    switch (event.httpMethod) {
+      case 'GET':
+        projectId = event.queryStringParameters.projectId;
+        if (!projectId) throw new Error('Project ID is required');
+        responseData = await handleGetChoices(supabase, projectId);
+        break;
+      case 'POST':
+        projectId = JSON.parse(event.body).project_id; // Get projectId from body
+        if (!projectId) throw new Error('Project ID is required in body');
+        responseData = await handleCreateChoices(supabase, event.body, userId);
+        statusCode = 201;
+        break;
+      case 'PUT':
+        if (!choiceId) throw new Error('Choice ID is required for updates');
+        responseData = await handleUpdateChoice(supabase, choiceId, event.body, userId);
+        break;
+      case 'DELETE':
+        if (!choiceId) throw new Error('Choice ID is required for deletion');
+        responseData = await handleDeleteChoice(supabase, choiceId, userId);
+        break;
+      default:
+        throw new Error('Method Not Allowed');
+    }
+
+    return {
+      statusCode: statusCode,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify(responseData),
+    };
+  } catch (error) {
+    if (DEBUG) console.error('Error:', error.message);
+    return {
+      statusCode: error.message.startsWith('Unauthorized') ? 401 : 500,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify({ error: error.message }),
+    };
+  }
+};
+=======
+netlify/functions/choices.test.js
+import { handler } from './choices';
+import { createSupabaseClient, getAuthenticatedUser } from '../../utils/supabaseClient';
+
+jest.mock('../../utils/supabaseClient', () => ({
+  createSupabaseClient: jest.fn(),
+  getAuthenticatedUser: jest.fn(),
+}));
+
+const mockSupabase = {
+  from: jest.fn(() => mockSupabase),
+  select: jest.fn(() => mockSupabase),
+  eq: jest.fn(() => mockSupabase),
+  insert: jest.fn(() => mockSupabase),
+  update: jest.fn(() => mockSupabase),
+  delete: jest.fn(() => mockSupabase),
+};
+
+describe('Choices API', () => {
+  const userId = 'user1';
+  const projectId = 'project1';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    createSupabaseClient.mockReturnValue(mockSupabase);
+    getAuthenticatedUser.mockResolvedValue(userId);
+
+    mockSupabase.select.mockImplementation(() => mockSupabase);
+    mockSupabase.eq.mockImplementation(() => mockSupabase);
+    mockSupabase.insert.mockImplementation(() => mockSupabase);
+    mockSupabase.update.mockImplementation(() => mockSupabase);
+    mockSupabase.delete.mockImplementation(() => mockSupabase);
+  });
+
+  it('GET /choices?projectId=:id should return choices for a project', async () => {
+    const mockChoices = [{ id: '1', description: 'Choice 1', disqualified: false }];
+    mockSupabase.from.mockReturnValueOnce(mockSupabase);
+    mockSupabase.select.mockReturnValueOnce(mockSupabase);
+    mockSupabase.eq.mockResolvedValueOnce({ data: mockChoices, error: null });
+
+    const event = {
+      httpMethod: 'GET',
+      queryStringParameters: { projectId: projectId },
+    };
+
+    const response = await handler(event);
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(mockChoices);
+    expect(mockSupabase.from).toHaveBeenCalledWith('choices');
+    expect(mockSupabase.select).toHaveBeenCalledWith('*');
+    expect(mockSupabase.eq).toHaveBeenCalledWith('project_id', projectId);
+  });
+
+    it('POST /choices should create new choices', async () => {
+    const mockChoice = { id: '3', description: 'Choice 3', project_id: projectId };
+    mockSupabase.from.mockReturnValueOnce(mockSupabase);
+    mockSupabase.insert.mockReturnValueOnce(mockSupabase);
+    mockSupabase.select.mockResolvedValueOnce({ data: [mockChoice], error: null });
+    const event = {
+      httpMethod: 'POST',
+      body: JSON.stringify({ project_id: projectId, choices: [{ description: 'Choice 3'}] }),
+    };
+
+    const response = await handler(event);
+    expect(response.statusCode).toBe(201);
+    expect(JSON.parse(response.body)).toEqual([mockChoice]);
+    expect(mockSupabase.from).toHaveBeenCalledWith('choices');
+    expect(mockSupabase.insert).toHaveBeenCalledWith([{ description: 'Choice 3', project_id: projectId, disqualified: false}]);
+    expect(mockSupabase.select).toHaveBeenCalled();
+  });
+
+    it('POST /choices should return error if project_id is missing', async () => {
+        const event = {
+            httpMethod: 'POST',
+            body: JSON.stringify({ choices: [{ description: 'Choice 3'}] }),
+        };
+
+        const response = await handler(event);
+        expect(response.statusCode).toBe(500);
+        expect(JSON.parse(response.body).error).toBe('Project ID is required in body');
+    });
+
+      it('POST /choices should return error if choices is missing', async () => {
+        const event = {
+            httpMethod: 'POST',
+            body: JSON.stringify({ project_id: projectId }),
+        };
+
+        const response = await handler(event);
+        expect(response.statusCode).toBe(500);
+        expect(JSON.parse(response.body).error).toBe('Invalid request body: project_id and choices array are required');
+    });
+
+
+  it('PUT /choices/:id should update a choice', async () => {
+    const mockChoice = { id: '1', description: 'Updated Choice', disqualified: true };
+    mockSupabase.from.mockReturnValueOnce(mockSupabase);
+    mockSupabase.update.mockReturnValueOnce(mockSupabase);
+    mockSupabase.eq.mockReturnValueOnce(mockSupabase);
+    mockSupabase.select.mockResolvedValueOnce({ data: [mockChoice], error: null });
+
+    const event = {
+      httpMethod: 'PUT',
+      pathParameters: { id: '1' },
+      body: JSON.stringify({ description: 'Updated Choice', disqualified: true }),
+    };
+
+    const response = await handler(event);
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(mockChoice);
+    expect(mockSupabase.from).toHaveBeenCalledWith('choices');
+    expect(mockSupabase.update).toHaveBeenCalledWith({ description: 'Updated Choice', disqualified: true });
+    expect(mockSupabase.eq).toHaveBeenCalledWith('id', '1');
+    expect(mockSupabase.select).toHaveBeenCalled();
+  });
+
+    it('PUT /choices/:id should return an error if no update data is provided', async() => {
+        const event = {
+            httpMethod: 'PUT',
+            pathParameters: { id: '1' },
+            body: JSON.stringify({}),
+        };
+        const response = await handler(event);
+        expect(response.statusCode).toBe(500);
+        expect(JSON.parse(response.body).error).toBe('Invalid request body: at least one of description or disqualified must be provided');
+    });
+
+  it('DELETE /choices/:id should delete a choice', async () => {
+    mockSupabase.from.mockReturnValueOnce(mockSupabase);
+    mockSupabase.delete.mockReturnValueOnce(mockSupabase);
+    mockSupabase.eq.mockResolvedValueOnce({ data: null, error: null });
+    const event = {
+      httpMethod: 'DELETE',
+      pathParameters: { id: '1' },
+    };
+
+    const response = await handler(event);
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({ message: 'Choice deleted successfully' });
+    expect(mockSupabase.from).toHaveBeenCalledWith('choices');
+    expect(mockSupabase.delete).toHaveBeenCalled();
+    expect(mockSupabase.eq).toHaveBeenCalledWith('id', '1');
+  });
+});
+=======
+netlify/functions/criteria.js
+const { createSupabaseClient, getAuthenticatedUser } = require("../../utils/supabaseClient");
+const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
+
+const DEBUG = true;
+
+// Handle GET requests (Retrieve criteria for a project)
+const handleGetCriteria = async (supabase, projectId) => {
+  const { data, error } = await supabase
+    .from('criteria')
+    .select('*')
+    .eq('project_id', projectId);
+  if (error) throw new Error('Failed to fetch criteria: ' + error.message);
+  return data;
+};
+
+// Handle POST requests (Create new criteria)
+const handleCreateCriteria = async (supabase, body) => {
+    const { project_id, criteria } = JSON.parse(body)
+
+    if (!project_id || !criteria || !Array.isArray(criteria)) {
+        throw new Error('Invalid request body: project_id and criteria array are required');
+    }
+
+    const formattedCriteria = criteria.map(({ definition, weight }) => ({
+        project_id,
+        definition,
+        weight
+    }));
+
+    const { data, error } = await supabase
+        .from('criteria')
+        .insert(formattedCriteria)
+        .select();
+
+    if (error) throw new Error('Failed to create criteria: ' + error.message);
+    return data;
+};
+
+// Handle PUT requests (Update a criterion)
+const handleUpdateCriteria = async (supabase, criterionId, body) => {
+  const { definition, weight } = JSON.parse(body);
+
+  if (!definition || weight === undefined) {
+    throw new Error('Invalid request body: definition and weight are required');
+  }
+
+  const { data, error } = await supabase
+    .from('criteria')
+    .update({ definition, weight })
+    .eq('id', criterionId)
+    .select();
+
+  if (error) throw new Error('Failed to update criterion: ' + error.message);
+  if (data.length === 0) throw new Error('Criterion not found');
+  return data[0];
+};
+
+// Handle DELETE requests (Delete a criterion)
+const handleDeleteCriteria = async (supabase, criterionId) => {
+  const { error } = await supabase
+    .from('criteria')
+    .delete()
+    .eq('id', criterionId);
+
+  if (error) throw new Error('Failed to delete criterion: ' + error.message);
+  return { message: 'Criterion deleted successfully' };
+};
+
+exports.handler = async (event) => {
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+  try {
+    if (DEBUG) console.log(`${event.httpMethod} request received`);
+
+    // Handle OPTIONS preflight request
+    if (event.httpMethod === 'OPTIONS') {
+      return { statusCode: 204, headers: { ...CORS_HEADERS(event) }, body: '' };
+    }
+
+    // Initialize Supabase client and authenticate user
+    const supabase = createSupabaseClient(supabaseUrl, supabaseAnonKey);
+    await getAuthenticatedUser(supabase); // Ensure user is authenticated
+
+    let projectId;
+    const criterionId = event.pathParameters?.id;
+
+    // Handle different request types
+    let responseData;
+    let statusCode = 200;
+    switch (event.httpMethod) {
+      case 'GET':
+        projectId = event.queryStringParameters.projectId;
+        if (!projectId) throw new Error('Project ID is required');
+        responseData = await handleGetCriteria(supabase, projectId);
+        break;
+      case 'POST':
+        projectId = JSON.parse(event.body).project_id; // Get projectId from body
+        if (!projectId) throw new Error('Project ID is required in body');
+        responseData = await handleCreateCriteria(supabase, event.body);
+        statusCode = 201;
+        break;
+      case 'PUT':
+        if (!criterionId) throw new Error('Criterion ID is required for updates');
+        responseData = await handleUpdateCriteria(supabase, criterionId, event.body);
+        break;
+      case 'DELETE':
+        if (!criterionId) throw new Error('Criterion ID is required for deletion');
+        responseData = await handleDeleteCriteria(supabase, criterionId);
+        break;
+      default:
+        throw new Error('Method Not Allowed');
+    }
+
+    return {
+      statusCode: statusCode,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify(responseData),
+    };
+  } catch (error) {
+    if (DEBUG) console.error('Error:', error.message);
+    return {
+      statusCode: error.message.startsWith('Unauthorized') ? 401 : 500,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify({ error: error.message }),
+    };
+  }
+};
+=======
+netlify/functions/criteria.test.js
+import { handler } from './criteria';
+import { createSupabaseClient, getAuthenticatedUser } from '../../utils/supabaseClient';
+
+jest.mock('../../utils/supabaseClient', () => ({
+  createSupabaseClient: jest.fn(),
+  getAuthenticatedUser: jest.fn(),
+}));
+
+const mockSupabase = {
+  from: jest.fn(() => mockSupabase),
+  select: jest.fn(() => mockSupabase),
+  eq: jest.fn(() => mockSupabase),
+  insert: jest.fn(() => mockSupabase),
+  update: jest.fn(() => mockSupabase),
+  delete: jest.fn(() => mockSupabase),
+};
+
+describe('Criteria API', () => {
+  const userId = 'user1';
+  const projectId = 'project1';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    createSupabaseClient.mockReturnValue(mockSupabase);
+    getAuthenticatedUser.mockResolvedValue(userId);
+
+    mockSupabase.select.mockImplementation(() => mockSupabase);
+    mockSupabase.eq.mockImplementation(() => mockSupabase);
+    mockSupabase.insert.mockImplementation(() => mockSupabase);
+    mockSupabase.update.mockImplementation(() => mockSupabase);
+    mockSupabase.delete.mockImplementation(() => mockSupabase);
+  });
+
+  it('GET /criteria?projectId=:id should return criteria for a project', async () => {
+    const mockCriteria = [{ id: '1', definition: 'Criterion 1', weight: 2 }];
+    mockSupabase.from.mockReturnValueOnce(mockSupabase);
+    mockSupabase.select.mockReturnValueOnce(mockSupabase);
+    mockSupabase.eq.mockResolvedValueOnce({ data: mockCriteria, error: null });
+
+    const event = {
+      httpMethod: 'GET',
+      queryStringParameters: { projectId: projectId },
+    };
+
+    const response = await handler(event);
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(mockCriteria);
+    expect(mockSupabase.from).toHaveBeenCalledWith('criteria');
+    expect(mockSupabase.select).toHaveBeenCalledWith('*');
+    expect(mockSupabase.eq).toHaveBeenCalledWith('project_id', projectId);
+  });
+
+ it('POST /criteria should create new criteria', async () => {
+    const mockCriterion = { id: '1', definition: 'New Criterion', weight: 3, project_id: projectId };
+    mockSupabase.from.mockReturnValueOnce(mockSupabase);
+    mockSupabase.insert.mockReturnValueOnce(mockSupabase);
+    mockSupabase.select.mockResolvedValueOnce({ data: [mockCriterion], error: null });
+    const event = {
+      httpMethod: 'POST',
+      body: JSON.stringify({ project_id: projectId, criteria: [{ definition: 'New Criterion', weight: 3 }] }),
+    };
+
+    const response = await handler(event);
+    expect(response.statusCode).toBe(201);
+    expect(JSON.parse(response.body)).toEqual([mockCriterion]);
+    expect(mockSupabase.from).toHaveBeenCalledWith('criteria');
+    expect(mockSupabase.insert).toHaveBeenCalledWith([{ definition: 'New Criterion', weight: 3, project_id: projectId}]);
+    expect(mockSupabase.select).toHaveBeenCalled();
+  });
+
+  it('POST /criteria should return error if project_id is missing', async () => {
+      const event = {
+          httpMethod: 'POST',
+          body: JSON.stringify({ criteria: [{ definition: 'New Criterion', weight: 3 }] }),
+      };
+
+      const response = await handler(event);
+      expect(response.statusCode).toBe(500);
+      expect(JSON.parse(response.body).error).toBe('Project ID is required in body');
+  });
+
+  it('POST /criteria should return error if criteria is missing', async () => {
+      const event = {
+          httpMethod: 'POST',
+          body: JSON.stringify({ project_id: projectId }),
+      };
+
+      const response = await handler(event);
+      expect(response.statusCode).toBe(500);
+      expect(JSON.parse(response.body).error).toBe('Invalid request body: project_id and criteria array are required');
+  });
+
+
+  it('PUT /criteria/:id should update a criterion', async () => {
+    const mockCriterion = { id: '1', definition: 'Updated Criterion', weight: 4 };
+    mockSupabase.from.mockReturnValueOnce(mockSupabase);
+    mockSupabase.update.mockReturnValueOnce(mockSupabase);
+    mockSupabase.eq.mockReturnValueOnce(mockSupabase);
+    mockSupabase.select.mockResolvedValueOnce({ data: [mockCriterion], error: null });
+
+    const event = {
+      httpMethod: 'PUT',
+      pathParameters: { id: '1' },
+      body: JSON.stringify({ definition: 'Updated Criterion', weight: 4 }),
+    };
+
+    const response = await handler(event);
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(mockCriterion);
+    expect(mockSupabase.from).toHaveBeenCalledWith('criteria');
+    expect(mockSupabase.update).toHaveBeenCalledWith({ definition: 'Updated Criterion', weight: 4 });
+    expect(mockSupabase.eq).toHaveBeenCalledWith('id', '1');
+    expect(mockSupabase.select).toHaveBeenCalled();
+  });
+
+  it('DELETE /criteria/:id should delete a criterion', async () => {
+    mockSupabase.from.mockReturnValueOnce(mockSupabase);
+    mockSupabase.delete.mockReturnValueOnce(mockSupabase);
+    mockSupabase.eq.mockResolvedValueOnce({ data: null, error: null });
+    const event = {
+      httpMethod: 'DELETE',
+      pathParameters: { id: '1' },
+    };
+
+    const response = await handler(event);
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({ message: 'Criterion deleted successfully' });
+    expect(mockSupabase.from).toHaveBeenCalledWith('criteria');
+    expect(mockSupabase.delete).toHaveBeenCalled();
+    expect(mockSupabase.eq).toHaveBeenCalledWith('id', '1');
+  });
+});
+=======
+netlify/functions/hello.js
+// Debug flag
+const DEBUG = true;
+
+exports.handler = async () => {
+  if (DEBUG) console.log("Handler invoked");
+  return {
+    statusCode: 200,
+    body: "Hello"
+  };
+};
+=======
+netlify/functions/projects.js
+const { createSupabaseClient, getAuthenticatedUser } = require("../../utils/supabaseClient");
+const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
+
+const DEBUG = true;
+
+// Handle GET requests (Retrieve all user's projects or a single project)
+const handleGetProjects = async (supabase, userId, projectId) => {
+  if (DEBUG) console.log("Fetching projects for user:", userId, "Project ID:", projectId);
+
+  let query = supabase
+    .from('projects')
+    .select('*')
+    .eq('created_by', userId);
+
+  if (projectId) {
+    query = query.eq('id', projectId).single();
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error('Failed to fetch projects: ' + error.message);
+  if (DEBUG) console.log("Fetched projects:", data);
+  return data;
+};
+
+// Handle POST requests (Create a new project)
+const handleCreateProject = async (supabase, userId, body) => {
+  if (DEBUG) console.log("Creating project for user:", userId, "Payload:", body);
+
+  const { title, description } = JSON.parse(body);
+  if (!title) throw new Error('Project title is required');
+
+  const { data, error } = await supabase
+    .from('projects')
+    .insert([{ title, description, created_by: userId }])
+    .select();
+
+  if (error) throw new Error('Failed to create project: ' + error.message);
+  if (DEBUG) console.log("Project created:", data[0]);
+  return data[0];
+};
+
+// Handle PUT requests (Update a project)
+const handleUpdateProject = async (supabase, userId, projectId, body) => {
+  if (DEBUG) console.log("Updating project:", projectId, "for user:", userId, "Payload:", body);
+
+  const { title, description } = JSON.parse(body);
+  if (!title) throw new Error('Project title is required');
+
+  const { data, error } = await supabase
+    .from('projects')
+    .update({ title, description })
+    .eq('id', projectId)
+    .eq('created_by', userId)
+    .select();
+
+  if (error) throw new Error('Failed to update project: ' + error.message);
+  if (data.length === 0) throw new Error('Project not found or user not authorized');
+  if (DEBUG) console.log("Project updated:", data[0]);
+  return data[0];
+};
+
+// Handle DELETE requests (Delete a project)
+const handleDeleteProject = async (supabase, userId, projectId) => {
+  if (DEBUG) console.log("Deleting project:", projectId, "for user:", userId);
+
+  const { error } = await supabase
+    .from('projects')
+    .delete()
+    .eq('id', projectId)
+    .eq('created_by', userId);
+
+  if (error) throw new Error('Failed to delete project: ' + error.message);
+  if (DEBUG) console.log("Project deleted successfully");
+  return { message: 'Project deleted successfully' };
+};
+
+// Main handler function
+exports.handler = async (event) => {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+  try {
+    if (DEBUG) console.log(`Received ${event.httpMethod} request with path:`, event.path);
+    if (DEBUG) console.log("Request body:", event.body);
+
+    // Handle OPTIONS preflight request
+    if (event.httpMethod === 'OPTIONS') {
+      return { statusCode: 204, headers: { ...CORS_HEADERS(event) }, body: '' };
+    }
+
+    // Initialize Supabase client and authenticate user
+    const supabase = createSupabaseClient(supabaseUrl, supabaseAnonKey);
+    const userId = await getAuthenticatedUser(supabase).id; // Ensure user is authenticated
+    if (DEBUG) console.log("Authenticated user ID:", userId);
+
+    const projectId = event.pathParameters?.id;
+    if (DEBUG && projectId) console.log("Project ID from path:", projectId);
+
+    // Handle different request types
+    let responseData;
+    let statusCode = 200;
+    switch (event.httpMethod) {
+      case 'GET':
+        responseData = await handleGetProjects(supabase, userId, projectId);
+        break;
+      case 'POST':
+        responseData = await handleCreateProject(supabase, userId, event.body);
+        statusCode = 201;
+        break;
+      case 'PUT':
+        if (!projectId) throw new Error('Project ID is required for updates');
+        responseData = await handleUpdateProject(supabase, userId, projectId, event.body);
+        break;
+      case 'DELETE':
+        if (!projectId) throw new Error('Project ID is required for deletion');
+        responseData = await handleDeleteProject(supabase, userId, projectId);
+        break;
+      default:
+        throw new Error('Method Not Allowed');
+    }
+
+    if (DEBUG) console.log("Response data:", responseData);
+
+    return {
+      statusCode: statusCode,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify(responseData),
+    };
+  } catch (error) {
+    if (DEBUG) console.error('Error:', error.message);
+    return {
+      statusCode: error.message.startsWith('Unauthorized') ? 401 : 500,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify({ error: error.message }),
+    };
+  }
+};
+=======
+netlify/functions/projects.test.js
+import { handler } from './projects';
+import { createSupabaseClient, getAuthenticatedUser } from '../../utils/supabaseClient';
+
+jest.mock('../../utils/supabaseClient', () => ({
+  createSupabaseClient: jest.fn(),
+  getAuthenticatedUser: jest.fn(),
+}));
+
+const mockSupabase = {
+  from: jest.fn(() => mockSupabase),
+  select: jest.fn(() => mockSupabase),
+  eq: jest.fn(() => mockSupabase),
+  single: jest.fn(() => mockSupabase),
+  insert: jest.fn(() => mockSupabase),
+  update: jest.fn(() => mockSupabase),
+  delete: jest.fn(() => mockSupabase),
+};
+
+describe('Projects API', () => {
+  const userId = 'user1';
+  beforeEach(() => {
+    jest.clearAllMocks();
+    createSupabaseClient.mockReturnValue(mockSupabase);
+    getAuthenticatedUser.mockResolvedValue(userId);
+
+    // Reset mock implementations before each test
+    mockSupabase.select.mockImplementation(() => mockSupabase);
+    mockSupabase.eq.mockImplementation(() => mockSupabase);
+    mockSupabase.insert.mockImplementation(() => mockSupabase);
+    mockSupabase.update.mockImplementation(() => mockSupabase);
+    mockSupabase.delete.mockImplementation(() => mockSupabase);
+    mockSupabase.single.mockImplementation(() => mockSupabase);
+
+  });
+
+  it('GET /projects should return all projects for the user', async () => {
+    const mockProjects = [{ id: '1', title: 'Project 1' }, { id: '2', title: 'Project 2' }];
+
+    // Mock the chained calls correctly
+    mockSupabase.from.mockReturnValueOnce(mockSupabase);
+    mockSupabase.select.mockReturnValueOnce(mockSupabase);
+    mockSupabase.eq.mockResolvedValueOnce({ data: mockProjects, error: null });
+
+    const event = {
+      httpMethod: 'GET',
+      pathParameters: {},
+    };
+
+    const response = await handler(event);
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(mockProjects);
+    expect(mockSupabase.from).toHaveBeenCalledWith('projects');
+    expect(mockSupabase.select).toHaveBeenCalledWith('*');
+    expect(mockSupabase.eq).toHaveBeenCalledWith('created_by', userId);
+  });
+
+  it('POST /projects should return an error if title is missing', async () => {
+    const mockEvent = {
+      httpMethod: 'POST',
+      body: JSON.stringify({ description: 'Test Description' }), // Missing title
+    };
+
+    const response = await handler(mockEvent);
+
+    expect(response.statusCode).toBe(500);
+    expect(JSON.parse(response.body).error).toBe('Project title is required');
+  });
+
+  it('POST /projects should create a project', async () => {
+    const mockProject = { id: '3', title: 'Project 3', description: 'Description' };
+
+    // Mock the chained calls correctly
+    mockSupabase.from.mockReturnValueOnce(mockSupabase);
+    mockSupabase.insert.mockReturnValueOnce(mockSupabase);
+    mockSupabase.select.mockResolvedValueOnce({ data: [mockProject], error: null });
+
+    const event = {
+      httpMethod: 'POST',
+      body: JSON.stringify({ title: 'Project 3', description: 'Description' }),
+    };
+
+    const response = await handler(event);
+    expect(response.statusCode).toBe(201);
+    expect(JSON.parse(response.body)).toEqual(mockProject);
+    expect(mockSupabase.from).toHaveBeenCalledWith('projects');
+    expect(mockSupabase.insert).toHaveBeenCalledWith([{ title: 'Project 3', description: 'Description', created_by: userId }]);
+    expect(mockSupabase.select).toHaveBeenCalled();
+  });
+
+  it('GET /projects/:id should return a single project', async () => {
+    const mockProject = { id: '1', title: 'Project 1' };
+
+    // Mock the chained calls correctly
+    mockSupabase.from.mockReturnValueOnce(mockSupabase);
+    mockSupabase.select.mockReturnValueOnce(mockSupabase);
+    mockSupabase.eq.mockReturnValueOnce(mockSupabase).mockReturnValueOnce(mockSupabase);
+    mockSupabase.single.mockResolvedValueOnce({ data: mockProject, error: null });
+
+    const event = {
+      httpMethod: 'GET',
+      pathParameters: { id: '1' },
+    };
+
+    const response = await handler(event);
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(mockProject);
+    expect(mockSupabase.from).toHaveBeenCalledWith('projects');
+    expect(mockSupabase.select).toHaveBeenCalledWith('*');
+    expect(mockSupabase.eq).toHaveBeenCalledWith('created_by', userId);
+    expect(mockSupabase.eq).toHaveBeenCalledWith('id', '1');
+    expect(mockSupabase.single).toHaveBeenCalled();
+  });
+
+  it('PUT /projects/:id should update a project', async () => {
+    const mockProject = { id: '1', title: 'Project 1 Updated', description: 'Updated Description' };
+
+    // Mock the chained calls correctly
+    mockSupabase.from.mockReturnValueOnce(mockSupabase);
+    mockSupabase.update.mockReturnValueOnce(mockSupabase);
+    mockSupabase.eq.mockReturnValueOnce(mockSupabase).mockReturnValueOnce(mockSupabase);
+
+    mockSupabase.select.mockResolvedValueOnce({ data: [mockProject], error: null });
+
+    const event = {
+      httpMethod: 'PUT',
+      pathParameters: { id: '1' },
+      body: JSON.stringify({ title: 'Project 1 Updated', description: 'Updated Description' }),
+    };
+
+    const response = await handler(event);
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(mockProject);
+    expect(mockSupabase.from).toHaveBeenCalledWith('projects');
+    expect(mockSupabase.update).toHaveBeenCalledWith({ title: 'Project 1 Updated', description: 'Updated Description' });
+    expect(mockSupabase.eq).toHaveBeenCalledWith('id', '1');
+    expect(mockSupabase.eq).toHaveBeenCalledWith('created_by', userId);
+    expect(mockSupabase.select).toHaveBeenCalled();
+  });
+
+  it('DELETE /projects/:id should delete a project', async () => {
+    // Mock the chained calls correctly
+    mockSupabase.from.mockReturnValueOnce(mockSupabase);
+    mockSupabase.delete.mockReturnValueOnce(mockSupabase);
+    mockSupabase.eq.mockReturnValueOnce(mockSupabase).mockReturnValueOnce(mockSupabase);
+
+    mockSupabase.eq.mockResolvedValueOnce({ data: null, error: null });
+
+    const event = {
+      httpMethod: 'DELETE',
+      pathParameters: { id: '1' },
+    };
+
+    const response = await handler(event);
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({ message: 'Project deleted successfully' });
+    expect(mockSupabase.from).toHaveBeenCalledWith('projects');
+    expect(mockSupabase.delete).toHaveBeenCalled();
+    expect(mockSupabase.eq).toHaveBeenCalledWith('id', '1');
+    expect(mockSupabase.eq).toHaveBeenCalledWith('created_by', userId);
+  });
+});
+=======
+netlify/functions/scores.js
+const { createSupabaseClient, getAuthenticatedUser } = require("../../utils/supabaseClient");
+const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
+
+const DEBUG = true;
+
+// Handle PUT requests (Update a score)
+const handleUpdateScore = async (supabase, body, userId) => {
+
+  const { criteria_id, choice_id, score } = JSON.parse(body);
+
+  if (!criteria_id || !choice_id || score === undefined || userId === undefined) {
+    throw new Error('Invalid request body: criteria_id, choice_id, score and userId are required');
+  }
+
+  if (score < 1 || score > 5) {
+    throw new Error('Invalid score: Score must be between 1 and 5');
+  }
+
+  const { data, error } = await supabase
+    .from('scores')
+    .upsert({ criteria_id, choice_id, score, userId }, { onConflict: 'criteria_id,choice_id' })
+    .select();
+
+  if (error) throw new Error('Failed to update score: ' + error.message);
+  return data[0];
+};
+
+exports.handler = async (event) => {
+  try {
+    if (DEBUG) console.log(`${event.httpMethod} request received`);
+
+    // Handle OPTIONS preflight request
+    if (event.httpMethod === 'OPTIONS') {
+      return { statusCode: 204, headers: { ...CORS_HEADERS(event) }, body: '' };
+    }
+
+    // Initialize Supabase client and authenticate user
+    const supabase = createSupabaseClient(supabaseUrl, supabaseAnonKey);
+    const userId = await getAuthenticatedUser(supabase).id; // Ensure user is authenticated
+
+    // Handle different request types
+    let responseData;
+    let statusCode = 200;
+    switch (event.httpMethod) {
+      case 'PUT':
+        responseData = await handleUpdateScore(supabase, event.body, userId);
+        break;
+      default:
+        throw new Error('Method Not Allowed');
+    }
+
+    return {
+      statusCode: statusCode,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify(responseData),
+    };
+  } catch (error) {
+    if (DEBUG) console.error('Error:', error.message);
+    return {
+      statusCode: error.message.startsWith('Unauthorized') ? 401 : 500,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify({ error: error.message }),
+    };
+  }
+};
+=======
+netlify/functions/scores.test.js
+import { handler } from './scores';
+import { createSupabaseClient, getAuthenticatedUser } from '../../utils/supabaseClient';
+
+jest.mock('../../utils/supabaseClient', () => ({
+  createSupabaseClient: jest.fn(),
+  getAuthenticatedUser: jest.fn(),
+}));
+
+const mockSupabase = {
+  from: jest.fn(() => mockSupabase),
+  upsert: jest.fn(() => mockSupabase),
+  select: jest.fn(() => mockSupabase),
+};
+
+describe('Scores API', () => {
+  const userId = 'user1';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    createSupabaseClient.mockReturnValue(mockSupabase);
+    getAuthenticatedUser.mockResolvedValue(userId);
+
+    mockSupabase.select.mockImplementation(() => mockSupabase);
+    mockSupabase.upsert.mockImplementation(() => mockSupabase);
+  });
+
+    it('PUT /scores should create or update a score', async () => {
+    const mockScore = { criteria_id: 'criteria1', choice_id: 'choice1', score: 4 };
+        mockSupabase.from.mockReturnValueOnce(mockSupabase);
+        mockSupabase.upsert.mockReturnValueOnce(mockSupabase);
+    mockSupabase.select.mockResolvedValueOnce({ data: [mockScore], error: null });
+
+    const event = {
+      httpMethod: 'PUT',
+      body: JSON.stringify(mockScore),
+    };
+
+    const response = await handler(event);
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(mockScore);
+    expect(mockSupabase.from).toHaveBeenCalledWith('scores');
+    expect(mockSupabase.upsert).toHaveBeenCalledWith(mockScore, { onConflict: 'criteria_id,choice_id' });
+    expect(mockSupabase.select).toHaveBeenCalled();
+  });
+
+  it('PUT /scores should return an error if criteria_id is missing', async () => {
+    const event = {
+      httpMethod: 'PUT',
+      body: JSON.stringify({ choice_id: 'choice1', score: 4 }),
+    };
+
+    const response = await handler(event);
+
+    expect(response.statusCode).toBe(500);
+    expect(JSON.parse(response.body).error).toBe('Invalid request body: criteria_id, choice_id, and score are required');
+  });
+
+    it('PUT /scores should return an error if choice_id is missing', async () => {
+        const event = {
+            httpMethod: 'PUT',
+            body: JSON.stringify({ criteria_id: 'criteria1', score: 4 }),
+        };
+
+        const response = await handler(event);
+
+        expect(response.statusCode).toBe(500);
+        expect(JSON.parse(response.body).error).toBe('Invalid request body: criteria_id, choice_id, and score are required');
+    });
+
+    it('PUT /scores should return an error if score is missing', async () => {
+        const event = {
+            httpMethod: 'PUT',
+            body: JSON.stringify({ criteria_id: 'criteria1', choice_id: 'choice1' }),
+        };
+
+        const response = await handler(event);
+
+        expect(response.statusCode).toBe(500);
+        expect(JSON.parse(response.body).error).toBe('Invalid request body: criteria_id, choice_id, and score are required');
+    });
+
+    it('PUT /scores should return an error if score is invalid', async () => {
+        const event = {
+            httpMethod: 'PUT',
+            body: JSON.stringify({ criteria_id: 'criteria1', choice_id: 'choice1', score: 6 }),
+        };
+
+        const response = await handler(event);
+
+        expect(response.statusCode).toBe(500);
+        expect(JSON.parse(response.body).error).toBe('Invalid score: Score must be between 1 and 5');
+    });
+});
+=======
+netlify/functions/session.js
+const { createClient } = require("@supabase/supabase-js");
+const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
+const { getSessionToken } = require('../../utils/getSessionToken');
+
+// Debug flag
+const DEBUG = true;
+
+exports.handler = async (event) => {
+    if (DEBUG) console.log("Handler invoked");
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+        if (DEBUG) console.log("Supabase environment variables not set");
+        return {
+            statusCode: 500,
+            headers: { ...CORS_HEADERS(event) },
+            body: JSON.stringify({ error: "Supabase environment variables not set" }),
+        };
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+    // Handle OPTIONS preflight requests
+    if (event.httpMethod === "OPTIONS") {
+        if (DEBUG) console.log("OPTIONS request received");
+        return {
+            statusCode: 204,
+            headers: { ...CORS_HEADERS(event) },
+            body: "",
+        };
+    }
+
+    if (event.httpMethod === "GET") {
+        try {
+            const sessionToken = getSessionToken(event);
+
+            if (!sessionToken) {
+                return {
+                    statusCode: 401,
+                    headers: { ...CORS_HEADERS(event) },
+                    body: JSON.stringify({ error: "No session token found" }),
+                };
+            }
+
+            const { data: user, error } = await supabase.auth.getUser(sessionToken);
+
+            if (error) {
+                return {
+                    statusCode: 401,
+                    headers: { ...CORS_HEADERS(event) },
+                    body: JSON.stringify({ error: error.message }),
+                };
+            }
+
+            return {
+                statusCode: 200,
+                headers: { ...CORS_HEADERS(event) },
+                body: JSON.stringify({ session: user }),
+            };
+
+        } catch (error) {
+            console.error('Error:', error);
+            return {
+                statusCode: 500,
+                headers: { ...CORS_HEADERS(event) },
+                body: JSON.stringify({ error: 'Failed to retrieve session data.' }),
+            };
+        }
+    }
+
+    if (DEBUG) console.log("Method not allowed");
+    return {
+        statusCode: 405,
+        headers: { ...CORS_HEADERS(event) },
+        body: JSON.stringify({ error: "Method Not Allowed" }),
+    };
+}
+=======
+netlify/functions/signin.js
+const { createClient } = require("@supabase/supabase-js");
+const cookie = require("cookie");
+const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
+
+// Debug flag
+const DEBUG = true;
+
+exports.handler = async (event) => {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+  if (DEBUG) console.log("Handler invoked");
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    if (DEBUG) console.log("Supabase environment variables not set");
+    return {
+      statusCode: 500,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify({ error: "Supabase environment variables not set" }),
+    };
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  
+  if (DEBUG) console.log("Supabase client created");
+
+  // Handle OPTIONS preflight requests
+  if (event.httpMethod === "OPTIONS") {
+    if (DEBUG) {
+      console.log("OPTIONS request received");
+      console.log(CORS_HEADERS(event))
+    }
+    return {
+      statusCode: 204,
+      headers: { ...CORS_HEADERS(event) },
+      body: "",
+    };
+  }
+
+  if (event.httpMethod === "POST") {
+    try {
+      if (DEBUG) console.log("POST request received");
+
+      // Parse request body
+      const { email, password } = JSON.parse(event.body);
+      if (DEBUG) console.log("Parsed email:", email);
+
+      // Attempt to sign in user
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (DEBUG) console.log("Supabase sign-in attempt result:", { data, error });
+
+      if (error) {
+        if (DEBUG) console.log("Supabase signin error:", error);
+        return {
+          statusCode: error.status || 500,
+          headers: { ...CORS_HEADERS(event) },
+          body: JSON.stringify({ error: error.message || "Supabase signin error" }),
+        };
+      }
+
+      // Get project reference and set session cookie
+      const projectRef = supabaseUrl.split(".")[0].replace("https://", "");
+      const sessionCookieName = `sb-${projectRef}-auth-token`;
+
+      const cookieString = cookie.serialize(sessionCookieName, data.session.access_token, {
+        httpOnly: true, // Prevent JavaScript access
+        secure: process.env.NODE_ENV === "production", // Secure only in production
+        sameSite: "None", // Allows cross-origin authentication
+        maxAge: data.session.expires_in, // Set expiration
+        path: "/",
+      });
+
+      if (DEBUG) console.log("Cookie set:", cookieString);
+
+      return {
+        statusCode: 200,
+        headers: {
+          ...CORS_HEADERS(event),
+          "Set-Cookie": cookieString,
+        },
+        body: JSON.stringify({
+          message: "Sign in successful",
+          user: data.user,
+          session: data.session,
+          accessToken: data.session.access_token, // Add access token to response
+        }),
+      };
+    } catch (error) {
+      if (DEBUG) console.log("Error during POST request:", error);
+      return {
+        statusCode: 400,
+        headers: { ...CORS_HEADERS(event) },
+        body: JSON.stringify({ error: "Invalid request" }),
+      };
+    }
+  }
+
+  if (DEBUG) console.log("Method not allowed");
+  return {
+    statusCode: 405,
+    headers: { ...CORS_HEADERS(event) },
+    body: JSON.stringify({ error: "Method Not Allowed" }),
+  };
+};
+=======
+netlify/functions/signout.js
+const { createClient } = require('@supabase/supabase-js');
+const cookie = require('cookie');
+const { CORS_HEADERS } = require('../../utils/CORS_HEADERS');
+
+// Debug flag
+const DEBUG = true;
+
+exports.handler = async (event) => {
+  if (DEBUG) console.log("Handler invoked");
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    if (DEBUG) console.log("Supabase environment variables not set");
+    return {
+      statusCode: 500,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify({ error: "Supabase environment variables not set" }),
+    };
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+  // Handle OPTIONS preflight requests
+  if (event.httpMethod === "OPTIONS") {
+    if (DEBUG) console.log("OPTIONS request received");
+    return {
+      statusCode: 204,
+      headers: { ...CORS_HEADERS(event) },
+      body: "",
+    };
+  }
+
+  if (event.httpMethod === "POST") {
+    try {
+      if (DEBUG) console.log("POST request received");
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        if (DEBUG) console.log("Supabase signout error:", error);
+        return {
+          statusCode: error.status || 500,
+          headers: { ...CORS_HEADERS(event) },
+          body: JSON.stringify({ error: error.message || "Supabase signout error" }),
+        };
+      }
+
+      // Get project reference and clear session cookie
+      const projectRef = supabaseUrl.split(".")[0].replace("https://", "");
+      const sessionCookieName = `sb-${projectRef}-auth-token`;
+
+      // Expire the authentication cookie
+      const expiredCookie = cookie.serialize(sessionCookieName, "", {
+        httpOnly: true, // Prevent frontend JavaScript access
+        secure: process.env.NODE_ENV === "production", // Secure only in production
+        sameSite: "None", // Needed for cross-origin authentication
+        maxAge: 0, // Immediately expires the cookie
+        path: "/",
+      });
+
+      if (DEBUG) console.log("Cookie set:", expiredCookie);
+      return {
+        statusCode: 200,
+        headers: {
+          ...CORS_HEADERS(event),
+          "Set-Cookie": expiredCookie, // Clear the session cookie
+        },
+        body: JSON.stringify({ message: "Sign out successful" }),
+      };
+    } catch (error) {
+      if (DEBUG) console.log("Error signing out:", error);
+      return {
+        statusCode: 400,
+        headers: { ...CORS_HEADERS(event) },
+        body: JSON.stringify({ error: "Invalid request" }),
+      };
+    }
+  }
+
+  if (DEBUG) console.log("Method not allowed");
+  return {
+    statusCode: 405,
+    headers: { ...CORS_HEADERS(event) },
+    body: JSON.stringify({ error: "Method Not Allowed" }),
+  };
+};
+=======
+netlify/functions/signup.js
+const { createClient } = require("@supabase/supabase-js");
+const cookie = require("cookie");
+const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
+
+// Debug flag
+const DEBUG = true;
+
+exports.handler = async (event) => {
+  if (DEBUG) console.log("Handler invoked");
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    if (DEBUG) console.log("Supabase environment variables not set");
+    return {
+      statusCode: 500,
+      headers: { ...CORS_HEADERS(event) },
+      body: JSON.stringify({ error: "Supabase environment variables not set" }),
+    };
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+  // Handle the OPTIONS method for preflight requests
+  if (event.httpMethod === "OPTIONS") {
+    if (DEBUG) console.log("OPTIONS request received");
+    return {
+      statusCode: 204, // No Content
+      headers: { ...CORS_HEADERS(event) },
+      body: "",
+    };
+  }
+
+  // Handle the POST request
+  if (event.httpMethod === "POST") {
+    try {
+      // Parse request body
+      const { email, password } = JSON.parse(event.body);
+      if (DEBUG) console.log("POST request received with email:", email, "password:", password);
+
+      // Sign up the user
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (signUpError) {
+        console.error("Supabase signup error:", signUpError);
+        if (DEBUG) console.log("Supabase signup error:", signUpError);
+        return {
+          statusCode: signUpError.status || 500,
+          headers: { ...CORS_HEADERS(event) },
+          body: JSON.stringify({ error: signUpError.message || "Supabase signup error" }),
+        };
+      }
+
+      // Automatically sign in the user after signup
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError) {
+        console.error("Supabase signin error:", signInError);
+        if (DEBUG) console.log("Supabase signin error:", signInError);
+        return {
+          statusCode: signInError.status || 500,
+          headers: { ...CORS_HEADERS(event)},
+          body: JSON.stringify({ error: signInError.message || "Supabase signin error" }),
+        };
+      }
+
+      // Set session cookie
+      const projectRef = supabaseUrl.split(".")[0].replace("https://", "");
+      const sessionCookieName = `sb-${projectRef}-auth-token`;
+      const sessionToken = signInData.session.access_token;
+
+      const cookieString = cookie.serialize(sessionCookieName, sessionToken, {
+        httpOnly: true, // Prevent frontend JavaScript access
+        secure: process.env.NODE_ENV === "production", // Secure only in production
+        sameSite: "None", // Allows cross-site requests
+        maxAge: signInData.session.expires_in, // Set expiration
+        path: "/",
+      });
+
+      if (DEBUG) console.log("Cookie set:", cookieString);
+
+      return {
+        statusCode: 200,
+        headers: {
+          ...CORS_HEADERS(event),
+          "Set-Cookie": cookieString, // Set session cookie
+        },
+        body: JSON.stringify({
+          message: "Sign up & sign in successful",
+          user: signUpData.user,
+          session: signInData.session,
+          accessToken: signInData.session.access_token, // Include access token in response
+        }),
+      };
+    } catch (error) {
+      console.error("Error in signup function:", error);
+      if (DEBUG) console.log("Error in signup function:", error);
+      return {
+        statusCode: 400,
+        headers: { ...CORS_HEADERS(event) },
+        body: JSON.stringify({ error: "Invalid JSON in request body" }),
+      };
+    }
+  }
+
+  // Default response for unsupported methods
+  if (DEBUG) console.log("Method not allowed");
+  return {
+    statusCode: 405, // Method Not Allowed
+    headers: { ...CORS_HEADERS(event) },
+    body: JSON.stringify({ error: "Method Not Allowed" }),
+  };
+};
+=======
+utils/getSessionToken.js
+module.exports.getSessionToken = function (event) {
+  // Check for Authorization header
+  const authHeader = event.headers.authorization;
+  if (authHeader) {
+    const match = authHeader.match(/^Bearer (.+)$/);
+    if (match) {
+      return match[1]; // Return the token from the header
+    }
+  }
+
+  // Fallback to checking cookies
+  const cookieString = event.headers.cookie || '';
+  const cookies = cookieString.split('; ').reduce((acc, cookie) => {
+    const [key, ...valueParts] = cookie.split('=');
+    acc[key] = valueParts.join('=');
+    return acc;
+  }, {});
+
+  const projectRef = process.env.SUPABASE_URL.split('.')[0].replace('https://', '');
+  const sessionCookieName = `sb-${projectRef}-auth-token`;
+
+  return cookies[sessionCookieName] || null;
+};
+
+utils/supabaseClient.js
+const { createClient } = require('@supabase/supabase-js');
+const { getSessionToken } = require('./getSessionToken');
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Supabase environment variables not set');
+}
+
+const createSupabaseClient = (event) => {
+  const sessionToken = getSessionToken(event);
+  if (!sessionToken) {
+    throw new Error('Unauthorized: No session token provided');
+  }
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${sessionToken}` } },
+  });
+};
+
+const getAuthenticatedUser = async (supabase) => {
+    const { data: user, error } = await supabase.auth.getUser();
+    if (error || !user) {
+        throw new Error("Invalid session token: " + error.message);
+    }
+    return user.user;
+}
+
+module.exports = { createSupabaseClient, getAuthenticatedUser };
+
+utils/CORS_HEADERS.js
+function CORS_HEADERS(event) {
+  const allowedOrigins = [
+    "http://localhost:3000",
+    "https://ktfrontend.netlify.app"
+  ];
+
+  // Safely get the request origin
+  const origin = event?.headers?.origin || "";
+
+  // Allow the origin only if it's in the allowed list
+  const isAllowedOrigin = allowedOrigins.includes(origin);
+
+  return {
+    "Access-Control-Allow-Origin": isAllowedOrigin ? origin : "", // Empty to avoid wildcard issues
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization", // Allow Authorization for token-based auth
+    "Access-Control-Allow-Credentials": "true",
+  };
+}
+
+module.exports = { CORS_HEADERS };
+
+package.json
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "Serverless functions for Kepner-Tregoe app",
+  "scripts": {
+    "test": "jest"
+  },
+  "jest": {
+    "transform": {
+      "^.+\\.js$": ["babel-jest", { "configFile": "./babel.config.cjs" }]
+    }
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.48.1",
+    "cookie": "^1.0.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.9",
+    "@babel/preset-env": "^7.26.9",
+    "jest": "^29.7.0"
+  }
+}
+=======
+babel.config.cjs
+module.exports = {
+  presets: [
+    ['@babel/preset-env', { targets: { node: 'current' } }],
+  ],
+};
+=======
+=======

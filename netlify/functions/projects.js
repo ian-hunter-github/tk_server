@@ -1,106 +1,137 @@
-const { createClient } = require("@supabase/supabase-js");
-const { getSessionToken } = require("../../utils/getSessionToken");
+const { createSupabaseClient, getAuthenticatedUser } = require("../../utils/supabaseClient");
 const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
 
 const DEBUG = true;
 
-// Initialize Supabase client
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+// Handle GET requests (Retrieve all user's projects or a single project)
+const handleGetProjects = async (supabase, userId, projectId) => {
+  if (DEBUG) console.log("Fetching projects for user:", userId, "Project ID:", projectId);
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("Supabase environment variables not set");
-  throw new Error("Supabase environment variables not set");
-}
+  let query = supabase
+    .from('projects')
+    .select('*')
+    .eq('created_by', userId);
 
-// ✅ Function to create a Supabase client with user authentication
-const createSupabaseClient = (authToken) =>
-  createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${authToken}` } },
-  });
+  if (projectId) {
+    query = query.eq('id', projectId).single();
+  }
 
-// ✅ Extract and authenticate user
-const getAuthenticatedUser = async (supabase, sessionToken) => {
-  const { data: user, error } = await supabase.auth.getUser(sessionToken);
-  if (error || !user) throw new Error("Invalid session token");
-  return user.user.id;
-};
-
-// ✅ Handle GET requests (Retrieve user's projects)
-const handleGetProjects = async (supabase, userId) => {
-  const { data, error } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("created_by", userId);
-  if (error) throw new Error("Failed to fetch projects: " + error.message);
+  const { data, error } = await query;
+  if (error) throw new Error('Failed to fetch projects: ' + error.message);
+  if (DEBUG) console.log("Fetched projects:", data);
   return data;
 };
 
-// ✅ Handle POST requests (Create a new project)
+// Handle POST requests (Create a new project)
 const handleCreateProject = async (supabase, userId, body) => {
-  const { name, description, criteria } = JSON.parse(body);
-  if (!name) throw new Error("Project name is required");
+  if (DEBUG) console.log("Creating project for user:", userId, "Payload:", body);
+
+  const { title, description } = JSON.parse(body);
+  if (!title) throw new Error('Project title is required');
 
   const { data, error } = await supabase
-    .from("projects")
-    .insert([{ name, description, criteria, created_by: userId }])
+    .from('projects')
+    .insert([{ title, description, created_by: userId }])
     .select();
 
-  if (error) {
-    if (error.code === "PGRST204")
-      throw new Error(
-        "Database error: The 'criteria' column is missing. Please contact support."
-      );
-    if (error.code === "42501")
-      throw new Error(
-        "You do not have permission to create projects. Please check your database permissions."
-      );
-    throw new Error("Failed to create project: " + error.message);
-  }
-
+  if (error) throw new Error('Failed to create project: ' + error.message);
+  if (DEBUG) console.log("Project created:", data[0]);
   return data[0];
 };
 
-// ✅ Main handler function
+// Handle PUT requests (Update a project)
+const handleUpdateProject = async (supabase, userId, projectId, body) => {
+  if (DEBUG) console.log("Updating project:", projectId, "for user:", userId, "Payload:", body);
+
+  const { title, description } = JSON.parse(body);
+  if (!title) throw new Error('Project title is required');
+
+  const { data, error } = await supabase
+    .from('projects')
+    .update({ title, description })
+    .eq('id', projectId)
+    .eq('created_by', userId)
+    .select();
+
+  if (error) throw new Error('Failed to update project: ' + error.message);
+  if (data.length === 0) throw new Error('Project not found or user not authorized');
+  if (DEBUG) console.log("Project updated:", data[0]);
+  return data[0];
+};
+
+// Handle DELETE requests (Delete a project)
+const handleDeleteProject = async (supabase, userId, projectId) => {
+  if (DEBUG) console.log("Deleting project:", projectId, "for user:", userId);
+
+  const { error } = await supabase
+    .from('projects')
+    .delete()
+    .eq('id', projectId)
+    .eq('created_by', userId);
+
+  if (error) throw new Error('Failed to delete project: ' + error.message);
+  if (DEBUG) console.log("Project deleted successfully");
+  return { message: 'Project deleted successfully' };
+};
+
+// Main handler function
 exports.handler = async (event) => {
+  
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
   try {
-    if (DEBUG) console.log(`${event.httpMethod} request received`);
+    if (DEBUG) console.log(`Received ${event.httpMethod} request with path:`, event.path);
+    if (DEBUG) console.log("Request body:", event.body);
 
     // Handle OPTIONS preflight request
-    if (event.httpMethod === "OPTIONS") {
-      return { statusCode: 204, headers: { ...CORS_HEADERS(event) }, body: "" };
+    if (event.httpMethod === 'OPTIONS') {
+      return { statusCode: 204, headers: { ...CORS_HEADERS(event) }, body: '' };
     }
 
-    // Get session token from request
-    const sessionToken = getSessionToken(event);
-    if (!sessionToken) throw new Error("Unauthorized");
+    // Initialize Supabase client and authenticate user
+    const supabase = createSupabaseClient(event);
+    const user = await getAuthenticatedUser(supabase); // Ensure user is authenticated
+    const userId = user.id;
+    if (DEBUG) console.log("Authenticated user ID:", userId);
 
-    // Initialize Supabase with user's token & authenticate user
-    const supabase = createSupabaseClient(sessionToken);
-    const userId = await getAuthenticatedUser(supabase, sessionToken);
+    const projectId = event.pathParameters?.id;
+    if (DEBUG && projectId) console.log("Project ID from path:", projectId);
 
     // Handle different request types
     let responseData;
+    let statusCode = 200;
     switch (event.httpMethod) {
-      case "GET":
-        responseData = await handleGetProjects(supabase, userId);
+      case 'GET':
+        responseData = await handleGetProjects(supabase, userId, projectId);
         break;
-      case "POST":
+      case 'POST':
         responseData = await handleCreateProject(supabase, userId, event.body);
+        statusCode = 201;
+        break;
+      case 'PUT':
+        if (!projectId) throw new Error('Project ID is required for updates');
+        responseData = await handleUpdateProject(supabase, userId, projectId, event.body);
+        break;
+      case 'DELETE':
+        if (!projectId) throw new Error('Project ID is required for deletion');
+        responseData = await handleDeleteProject(supabase, userId, projectId);
         break;
       default:
-        throw new Error("Method Not Allowed");
+        throw new Error('Method Not Allowed');
     }
 
+    if (DEBUG) console.log("Response data:", responseData);
+
     return {
-      statusCode: event.httpMethod === "POST" ? 201 : 200,
+      statusCode: statusCode,
       headers: { ...CORS_HEADERS(event) },
       body: JSON.stringify(responseData),
     };
   } catch (error) {
-    if (DEBUG) console.error("Error:", error.message);
+    if (DEBUG) console.error('Error:', error.message);
     return {
-      statusCode: error.message === "Unauthorized" ? 401 : 500,
+      statusCode: error.message.startsWith('Unauthorized') ? 401 : 500,
       headers: { ...CORS_HEADERS(event) },
       body: JSON.stringify({ error: error.message }),
     };
