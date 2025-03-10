@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="500" xmlns="http://www.w3.org/2000/svg">
+    <!-- Entities -->
+    <rect x="50" y="50" width="150" height="60" stroke="black" fill="white"/>
+    <text x="80" y="80" font-size="14">Projects</text>
+    
+    <rect x="50" y="150" width="150" height="60" stroke="black" fill="white"/>
+    <text x="80" y="180" font-size="14">Criteria</text>
+    
+    <rect x="300" y="150" width="150" height="60" stroke="black" fill="white"/>
+    <text x="320" y="180" font-size="14">Alternatives</text>
+    
+    <rect x="180" y="300" width="150" height="60" stroke="black" fill="white"/>
+    <text x="220" y="330" font-size="14">Scores</text>
+    
+    <!-- Relationships -->
+    <line x1="125" y1="110" x2="125" y2="150" stroke="black"/>
+    <line x1="125" y1="210" x2="220" y2="300" stroke="black"/>
+    <line x1="375" y1="210" x2="290" y2="300" stroke="black"/>
+</svg>

@@ -6,13 +6,13 @@ const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
 const DEBUG = true;
 
 exports.handler = async (event) => {
+
+  if (DEBUG) console.log("[SignIn] Handler invoked");
+
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
-  if (DEBUG) console.log("Handler invoked");
-
   if (!supabaseUrl || !supabaseAnonKey) {
-    if (DEBUG) console.log("Supabase environment variables not set");
     return {
       statusCode: 500,
       headers: { ...CORS_HEADERS(event) },
@@ -20,16 +20,7 @@ exports.handler = async (event) => {
     };
   }
 
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
-  
-  if (DEBUG) console.log("Supabase client created");
-
-  // Handle OPTIONS preflight requests
   if (event.httpMethod === "OPTIONS") {
-    if (DEBUG) {
-      console.log("OPTIONS request received");
-      console.log(CORS_HEADERS(event))
-    }
     return {
       statusCode: 204,
       headers: { ...CORS_HEADERS(event) },
@@ -37,24 +28,22 @@ exports.handler = async (event) => {
     };
   }
 
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
   if (event.httpMethod === "POST") {
     try {
-      if (DEBUG) console.log("POST request received");
 
-      // Parse request body
       const { email, password } = JSON.parse(event.body);
-      if (DEBUG) console.log("Parsed email:", email);
 
-      // Attempt to sign in user
+      if (DEBUG) console.log("[SignIn] POST with Params: ", email, password);
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (DEBUG) console.log("Supabase sign-in attempt result:", { data, error });
-
       if (error) {
-        if (DEBUG) console.log("Supabase signin error:", error);
+        if (DEBUG) console.log("[SignIn] SB Returns AccessToken: ", data.session?.access_token, error);
         return {
           statusCode: error.status || 500,
           headers: { ...CORS_HEADERS(event) },
@@ -62,35 +51,30 @@ exports.handler = async (event) => {
         };
       }
 
-      // Get project reference and set session cookie
-      const projectRef = supabaseUrl.split(".")[0].replace("https://", "");
-      const sessionCookieName = `sb-${projectRef}-auth-token`;
+      if (DEBUG) console.log("[SignIn] SB Returns AccessToken: ", data.session.access_token, error);
 
-      const cookieString = cookie.serialize(sessionCookieName, data.session.access_token, {
-        httpOnly: true, // Prevent JavaScript access
-        secure: process.env.NODE_ENV === "production", // Secure only in production
-        sameSite: "None", // Allows cross-origin authentication
-        maxAge: data.session.expires_in, // Set expiration
+      const cookieString = cookie.serialize("sb-auth-token", data.session.access_token, {
+        httpOnly: true,
+        secure: true, // Always set secure to true
+        sameSite: "None",
+        maxAge: data.session.expires_in,
         path: "/",
       });
-
-      if (DEBUG) console.log("Cookie set:", cookieString);
 
       return {
         statusCode: 200,
         headers: {
           ...CORS_HEADERS(event),
           "Set-Cookie": cookieString,
+          "Access-Control-Expose-Headers": "Set-Cookie, Authorization", // ✅ Allow browser access
         },
         body: JSON.stringify({
           message: "Sign in successful",
-          user: data.user,
-          session: data.session,
-          accessToken: data.session.access_token, // Add access token to response
+          user: { email: data.user.email, id: data.user.id, accessToken: data.session.access_token },
         }),
       };
     } catch (error) {
-      if (DEBUG) console.log("Error during POST request:", error);
+      console.log(error)
       return {
         statusCode: 400,
         headers: { ...CORS_HEADERS(event) },
@@ -99,7 +83,6 @@ exports.handler = async (event) => {
     }
   }
 
-  if (DEBUG) console.log("Method not allowed");
   return {
     statusCode: 405,
     headers: { ...CORS_HEADERS(event) },

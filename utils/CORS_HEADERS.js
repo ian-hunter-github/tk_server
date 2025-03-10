@@ -12,8 +12,8 @@ function CORS_HEADERS(event) {
 
   return {
     "Access-Control-Allow-Origin": isAllowedOrigin ? origin : "", // Empty to avoid wildcard issues
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization", // Allow Authorization for token-based auth
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Allow-Credentials": "true",
   };
 }
