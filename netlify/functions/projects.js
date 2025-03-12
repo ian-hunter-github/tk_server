@@ -1,13 +1,13 @@
-const { createClient } = require("@supabase/supabase-js");
 const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
 const { getPathId } = require("../../utils/getPathId");
+const { getDatabaseInstance } = require("../../utils/dbFactory.js");
 const cookie = require("cookie");
 
 // Debug flag
 const DEBUG = true;
 
 // Helper function to fetch projects
-async function fetchProjects(supabase, userId, projectId = null) {
+async function fetchProjects(db, userId, projectId = null) {
   if (DEBUG)
     console.log(
       "[projects] Fetching projects for user:",
@@ -16,39 +16,34 @@ async function fetchProjects(supabase, userId, projectId = null) {
       projectId
     );
 
-  let query = supabase.from("projects").select("*");
-
-  if (projectId) {
-    query = query.eq("id", projectId).eq("created_by", userId).single();
-  } else {
-    query = query.eq("created_by", userId);
-  }
-
   try {
-    const { data, error } = await query;
+    const { data: projects, error } = await db.fetchProjects(userId, projectId);
+
     if (error) {
       throw error;
     }
-    if (DEBUG) console.log("[projects] Fetched projects:", data);
 
-    if (projectId && data) {
+    if (DEBUG) console.log("[projects] Fetched projects:", projects);
+
+    if (projectId && projects) {
       // Fetch related criteria and choices
-      const criteria = await fetchCriteria(supabase, projectId, userId);
+      const { data: criteria, error: criteriaError } = await db.fetchCriteria(userId, projectId);
+      if(criteriaError) {
+        throw criteriaError;
+      }
       console.log("[fetchProjects] Fetched criteria:", criteria);
-      const choices = await fetchChoices(supabase, projectId, userId);
+      const { data: choices, error: choicesError } = await db.fetchChoices(userId, projectId);
+      if(choicesError){
+        throw choicesError;
+      }
       console.log("[fetchProjects] Fetched choices:", choices);
 
       let scoresMap = {};
       if (choices.length > 0) {
         // Fetch scores for the project
-        console.log("[fetchProjects] Fetching scores with choice IDs:", choices.map((c) => c.id));
-        const { data: scores, error: scoresError } = await supabase
-          .from("scores")
-          .select("*")
-          .in(
-            "choice_id",
-            choices.map((c) => c.id)
-          ); // Efficiently fetch only relevant scores
+        const choiceIds = choices.map((c) => c.id);
+        console.log("[fetchProjects] Fetching scores with choice IDs:", choiceIds);
+        const { data: scores, error: scoresError } = await db.fetchScores(choiceIds);
         console.log("[fetchProjects] Fetched scores:", scores);
 
         if (scoresError) {
@@ -62,6 +57,7 @@ async function fetchProjects(supabase, userId, projectId = null) {
       }
 
       console.log("[fetchProjects] scoresMap:", scoresMap);
+
       // Attach scores to choices and calculate total score
       const updatedChoices = choices.map((choice) => {
         console.log("[fetchProjects] Processing choice:", choice);
@@ -72,17 +68,17 @@ async function fetchProjects(supabase, userId, projectId = null) {
             console.log("[fetchProjects] Processing criterion:", criterion);
             const score = scoresMap[`${choice.id}_${criterion.id}`] || 0;
             choiceScores[criterion.id] = score;
-            totalScore += score * criterion.weight;
+            totalScore += score * (criterion.weight || 0); // Ensure weight is defined
           });
         }
         return { ...choice, scores: choiceScores, total_score: totalScore };
       });
 
-      // Add criteria and choices to the project data.  Return object not array
-      return { ...data, criteria, choices: updatedChoices };
+      // Add criteria and choices to the project data.
+      return { ...projects, criteria, choices: updatedChoices };
     }
 
-    return data;
+    return projects;
   } catch (error) {
     console.error("Error fetching project(s):", error);
     throw error;
@@ -90,14 +86,9 @@ async function fetchProjects(supabase, userId, projectId = null) {
 }
 
 // Helper function to fetch criteria for a project
-async function fetchCriteria(supabase, projectId, userId) {
-  if (DEBUG)
-    console.log("Fetching criteria for project:", projectId, "user:", userId);
-  const { data, error } = await supabase
-    .from("criteria")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("created_by", userId);
+async function fetchCriteria(db, projectId, userId) {
+    if (DEBUG) console.log("Fetching criteria for project:", projectId, "user:", userId);
+  const { data, error } = await db.fetchCriteria(userId, projectId);
 
   if (error) {
     throw error;
@@ -108,33 +99,25 @@ async function fetchCriteria(supabase, projectId, userId) {
 }
 
 // Helper function to fetch choices for a project
-async function fetchChoices(supabase, projectId, userId) {
+async function fetchChoices(db, projectId, userId) {
   if (DEBUG)
     console.log("Fetching choices for project:", projectId, "user:", userId);
-  const { data, error } = await supabase
-    .from("choices")
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("created_by", userId);
+  const { data, error } = await db.fetchChoices(userId, projectId);
 
   if (error) {
     throw error;
   }
 
   if (DEBUG) console.log("Fetched choices:", data);
-  return Array.isArray(data) ? data : [data].filter(Boolean);
+  return data;
 }
 
 // Helper function to create project
-async function createProject(supabase, userId, payload) {
+async function createProject(db, userId, payload) {
   if (DEBUG)
     console.log("Creating project for user:", userId, "Payload:", payload);
 
-  const { data, error } = await supabase
-    .from("projects")
-    .insert({ ...payload, created_by: userId })
-    .select()
-    .single();
+  const { data, error } = await db.createProject(userId, payload);
 
   if (error) {
     throw error;
@@ -145,7 +128,7 @@ async function createProject(supabase, userId, payload) {
 }
 
 // Helper function to update project
-async function updateProject(supabase, userId, projectId, payload) {
+async function updateProject(db, userId, projectId, payload) {
   if (DEBUG)
     console.log(
       "Updating project:",
@@ -156,13 +139,7 @@ async function updateProject(supabase, userId, projectId, payload) {
       payload
     );
 
-  const { data, error } = await supabase
-    .from("projects")
-    .update(payload)
-    .eq("id", projectId)
-    .eq("created_by", userId)
-    .select()
-    .single();
+  const { data, error } = await db.updateProject(userId, projectId, payload);
 
   if (error) {
     throw error;
@@ -173,14 +150,10 @@ async function updateProject(supabase, userId, projectId, payload) {
 }
 
 // Helper function to delete project
-async function deleteProject(supabase, userId, projectId) {
+async function deleteProject(db, userId, projectId) {
   if (DEBUG) console.log("Deleting project:", projectId, "for user:", userId);
 
-  const { error } = await supabase
-    .from("projects")
-    .delete()
-    .eq("id", projectId)
-    .eq("created_by", userId);
+  const { error } = await db.deleteProject(userId, projectId);
 
   if (error) {
     throw error;
@@ -242,42 +215,34 @@ exports.handler = async (event) => {
         console.log("[projects] cookies:", cookies);
         console.log("[projects] token:", token);
 
-        // Use default client, don't pass in authorization header
-        //const supabase = createClient(supabaseUrl, supabaseAnonKey);
-        const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-          global: { headers: { Authorization: `Bearer ${token}` } }
-        });
-        
-        // Supabase Server-side Auth Helpers: https://supabase.com/docs/guides/auth/server-side/creating-a-client?environment=netlify-functions
-        // Use getUser with the JWT directly
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser(token);
-        console.log("[projects] getUser result:", { user, userError });
+        const db = getDatabaseInstance();
 
-        if (userError || !user) {
-          console.error("Error getting user:", userError);
-          throw new Error("Unauthorized: Could not retrieve user.");
+        const { data: { user }, error: authError } = await db.signIn(null, null, token);
+
+        if (authError || !user) {
+          console.error("Authentication error:", authError);
+          throw new Error("Unauthorized: Could not authenticate user.");
         }
-        const userId = user.id;
 
+        const userId = user.id;
         let responseData;
 
         if (event.httpMethod === "GET") {
-          // Explicitly check for projectId being undefined
           responseData =
             typeof projectId !== "undefined"
-              ? await fetchProjects(supabase, userId, projectId)
-              : await fetchProjects(supabase, userId);
+              ? await fetchProjects(db, userId, projectId)
+              : await fetchProjects(db, userId);
         } else if (event.httpMethod === "POST") {
           const createPayload = JSON.parse(event.body);
           if (!createPayload.title) {
-            throw new Error("Project title is required");
+            return {
+              statusCode: 400,
+              headers: { ...CORS_HEADERS(event) },
+              body: JSON.stringify({ error: "Project title is required" }),
+            };
           }
-          responseData = await createProject(supabase, userId, createPayload);
+          responseData = await createProject(db, userId, createPayload);
         } else if (event.httpMethod === "PUT") {
-          // Get project ID from path parameters, mandatory for PUT
           ({ id: projectId, error, statusCode, headers, body } = getPathId(
             event,
             "projects",
@@ -287,26 +252,18 @@ exports.handler = async (event) => {
             return { statusCode, headers, body };
           }
           const updatePayload = JSON.parse(event.body);
-          responseData = await updateProject(
-            supabase,
-            userId,
-            projectId,
-            updatePayload
-          );
+          responseData = await updateProject(db, userId, projectId, updatePayload);
         } else if (event.httpMethod === "DELETE") {
-          // Get project ID from path parameters, mandatory for DELETE
           ({ id: projectId, error, statusCode, headers, body } = getPathId(
             event,
             "projects",
             true
           ));
-           if (error) {
+          if (error) {
             return { statusCode, headers, body };
           }
-         responseData = await deleteProject(supabase, userId, projectId);
+          responseData = await deleteProject(db, userId, projectId);
         }
-
-        if (DEBUG) console.log("[projects] Response data:", responseData);
 
         return {
           statusCode: event.httpMethod === "POST" ? 201 : 200,

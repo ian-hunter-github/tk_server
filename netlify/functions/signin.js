@@ -1,5 +1,5 @@
-const { createClient } = require("@supabase/supabase-js");
 const cookie = require("cookie");
+const { getDatabaseInstance } = require('../../utils/dbFactory.js');
 const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
 
 // Debug flag
@@ -9,17 +9,6 @@ exports.handler = async (event) => {
 
   if (DEBUG) console.log("[SignIn] Handler invoked");
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return {
-      statusCode: 500,
-      headers: { ...CORS_HEADERS(event) },
-      body: JSON.stringify({ error: "Supabase environment variables not set" }),
-    };
-  }
-
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 204,
@@ -28,7 +17,7 @@ exports.handler = async (event) => {
     };
   }
 
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const db = getDatabaseInstance();
 
   if (event.httpMethod === "POST") {
     try {
@@ -37,13 +26,11 @@ exports.handler = async (event) => {
 
       if (DEBUG) console.log("[SignIn] POST with Params: ", email, password);
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { data: signInData, error } = await db.signIn(email, password);
+
+      if (DEBUG) console.log("[SignIn] SB Returns AccessToken: ", signInData?.user?.access_token, error);
 
       if (error) {
-        if (DEBUG) console.log("[SignIn] SB Returns AccessToken: ", data.session?.access_token, error);
         return {
           statusCode: error.status || 500,
           headers: { ...CORS_HEADERS(event) },
@@ -51,13 +38,13 @@ exports.handler = async (event) => {
         };
       }
 
-      if (DEBUG) console.log("[SignIn] SB Returns AccessToken: ", data.session.access_token, error);
+      if (DEBUG) console.log("[SignIn] SB Returns AccessToken: ", signInData?.session?.access_token, error);
 
-      const cookieString = cookie.serialize("sb-auth-token", data.session.access_token, {
+      const cookieString = cookie.serialize("sb-auth-token", signInData.session.access_token, {
         httpOnly: true,
         secure: true, // Always set secure to true
         sameSite: "None",
-        maxAge: data.session.expires_in,
+        maxAge: signInData.session.expires_in,
         path: "/",
       });
 
@@ -70,7 +57,7 @@ exports.handler = async (event) => {
         },
         body: JSON.stringify({
           message: "Sign in successful",
-          user: { email: data.user.email, id: data.user.id, accessToken: data.session.access_token },
+          user: { email: signInData.user.email, id: signInData.user.id, accessToken: signInData.session.access_token },
         }),
       };
     } catch (error) {

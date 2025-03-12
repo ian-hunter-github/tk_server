@@ -1,120 +1,135 @@
 const { handler } = require("../netlify/functions/choices");
-const {
-  getSessionToken: mockGetSessionToken,
-} = require("../utils/getSessionToken");
-const supabase = require("@supabase/supabase-js");
+const { v4: uuidv4 } = require("uuid");
+const { getDatabaseInstance } = require("../utils/dbFactory");
 
-jest.mock("../utils/getSessionToken");
-
-// Mock CORS headers
-jest.mock("../utils/CORS_HEADERS", () => ({
-  CORS_HEADERS: () => ({
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, userId",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  }),
-}));
-
-// Create Supabase mock methods
-const mockFrom = jest.fn().mockReturnThis();
-const mockSelect = jest.fn().mockReturnThis();
-const mockEq = jest.fn().mockImplementation((args) => {
-  if (typeof args === 'object' && args !== null) {
-    // Handle object-based .eq()
-    return {
-      eq: mockEq,
-      single: mockSingle,
-      select: mockSelect,
-      delete: mockDelete,
-    };
-  } else {
-    // Handle previous string, value .eq() calls
-    return {
-      eq: mockEq,
-      single: mockSingle,
-      select: mockSelect,
-      delete: mockDelete,
-    }
-  }
-});
-const mockSingle = jest.fn().mockReturnThis();
-const mockInsert = jest.fn();
-const mockUpdate = jest.fn().mockReturnThis();
-const mockDelete = jest.fn();
-
-// Mock Supabase client
-jest.mock("@supabase/supabase-js", () => ({
-  createClient: jest.fn(() => ({
-    from: mockFrom,
-    select: mockSelect,
-    eq: mockEq,
-    single: mockSingle,
-    insert: mockInsert,
-    update: mockUpdate,
-    delete: mockDelete,
-  })),
+// Mock the DatasourceInterface
+jest.mock("../utils/dbFactory", () => ({
+  getDatabaseInstance: jest.fn(),
 }));
 
 describe("Choices API", () => {
-  const userId = "1";
+  const userId = uuidv4();
+  const choiceId_1 = uuidv4();
+  const choiceId_2 = uuidv4();
+  const projectId = uuidv4();
   const mockChoices = [
-    { id: "1", project_id: "1", description: "Choice 1" },
-    { id: "2", project_id: "1", description: "Choice 2" },
+    { id: choiceId_1, project_id: projectId, name: "Choice 1" },
+    { id: choiceId_2, project_id: projectId, name: "Choice 2" },
   ];
-  const mockChoice = { id: "1", project_id: "1", description: "Choice 1" };
+
+  let mockDb;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env.SUPABASE_URL = "https://test.supabase.co";
-    process.env.SUPABASE_ANON_KEY = "test-key";
-    mockGetSessionToken.mockReturnValue(userId);
+
+    mockDb = {
+      signIn: jest.fn().mockResolvedValue({ data: { user: { id: userId } } }),
+      fetchChoices: jest
+        .fn()
+        .mockResolvedValue({ data: mockChoices, error: null }),
+      createChoices: jest
+        .fn()
+        .mockResolvedValue({ data: mockChoices, error: null }),
+      fetchCriteria: jest.fn().mockResolvedValue({ data: [], error: null }),
+      updateChoice: jest
+        .fn()
+        .mockResolvedValue({ data: mockChoices[0], error: null }),
+      deleteChoice: jest.fn().mockResolvedValue({ data: null, error: null }),
+    };
+    getDatabaseInstance.mockReturnValue(mockDb);
   });
 
   it("GET /choices should return all choices for the project with userId", async () => {
-    mockFrom.mockReturnThis();
-    mockSelect.mockReturnThis();
-    mockEq.mockResolvedValueOnce({ data: mockChoices, error: null });
-
     const event = {
       httpMethod: "GET",
-      headers: {  },
-      queryStringParameters: { projectId: "1" },
+      headers: { cookie: `sb-auth-token=${userId}` },
+      queryStringParameters: { projectId: projectId },
     };
 
     const response = await handler(event);
-    expect(response.statusCode).toBe(401);
-    expect(JSON.parse(response.body)).toEqual({ error: "Unauthorized" });
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual(mockChoices);
+    expect(mockDb.signIn).toHaveBeenCalledWith(null, null, userId);
+    expect(mockDb.fetchChoices).toHaveBeenCalledWith(userId, projectId);
   });
 
-  it("POST /choices should create choices with userId", async () => {
-    mockInsert.mockReturnValueOnce({ select: mockSelect });
-    mockSelect.mockResolvedValueOnce({ data: mockChoices, error: null });
+  it("GET /choices should return 401 if not authorized", async () => {
+    const event = {
+      httpMethod: "GET",
+      headers: {},
+      queryStringParameters: { projectId: projectId },
+    };
+    mockDb.signIn.mockResolvedValue({ data: {}, error: "No token" });
+    const response = await handler(event);
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("POST /choices should create a choice with userId", async () => {
     const event = {
       httpMethod: "POST",
-      headers: {  },
+      headers: { cookie: `sb-auth-token=${userId}` },
       body: JSON.stringify({
-        project_id: "1",
+        project_id: projectId,
         choices: mockChoices,
       }),
     };
 
     const response = await handler(event);
-    expect(response.statusCode).toBe(401);
-    expect(JSON.parse(response.body)).toEqual({ error: "Unauthorized" });
+    expect(response.statusCode).toBe(201);
+    expect(JSON.parse(response.body)).toEqual(mockChoices);
+    expect(mockDb.signIn).toHaveBeenCalledWith(null, null, userId);
+    expect(mockDb.createChoices).toHaveBeenCalledWith(
+      userId,
+      projectId,
+      mockChoices
+    );
   });
 
-    it("DELETE /choices/:id should delete a choice with userId", async () => {
-      mockDelete.mockReturnValueOnce({ eq: mockEq });
-      mockEq.mockResolvedValueOnce({ data: null, error: null });
-
+  it("POST /choices should return 401 if not authorized", async () => {
     const event = {
-      httpMethod: "DELETE",
-      headers: {  },
-      pathParameters: { id: "1" },
+      httpMethod: "POST",
+      headers: {},
+      body: JSON.stringify({
+        project_id: projectId,
+        choices: mockChoices,
+      }),
+    };
+    mockDb.signIn.mockResolvedValue({ data: {}, error: "No token" });
+    const response = await handler(event);
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("PUT /choices/:id should update a choice with userId", async () => {
+    const event = {
+      httpMethod: "PUT",
+      headers: { cookie: `sb-auth-token=${userId}` },
+      pathParameters: { id: choiceId_1 },
+      body: JSON.stringify({
+        name: "Updated Choice",
+      }),
     };
 
     const response = await handler(event);
-    expect(response.statusCode).toBe(401);
-    expect(JSON.parse(response.body)).toEqual({ error: "Unauthorized" });
+    expect(response.statusCode).toBe(200);
+    expect(mockDb.signIn).toHaveBeenCalledWith(null, null, userId);
+    expect(mockDb.updateChoice).toHaveBeenCalledWith(userId, choiceId_1, {
+      name: "Updated Choice",
+    });
+  });
+
+  it("DELETE /choices/:id should delete a choice with userId", async () => {
+    const event = {
+      httpMethod: "DELETE",
+      headers: { cookie: `sb-auth-token=${userId}` },
+      pathParameters: { id: choiceId_1 },
+    };
+
+    const response = await handler(event);
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({
+      message: "Choice deleted successfully",
+    });
+    expect(mockDb.signIn).toHaveBeenCalledWith(null, null, userId);
+    expect(mockDb.deleteChoice).toHaveBeenCalledWith(userId, choiceId_1);
   });
 });

@@ -1,15 +1,34 @@
 const { handler: signupHandler } = require('../netlify/functions/signup.js');
 const { handler: signinHandler } = require('../netlify/functions/signin.js');
+const DatasourceInterface = require('../utils/DatasourceInterface');
 
-// Mock Supabase client
+// Mock responses
 let mockSignUp;
-let mockSignInWithPassword;
+let mockSignIn;
 
+// Create a mock implementation of DatasourceInterface
+class MockDatasource extends DatasourceInterface {
+  async signIn(email, password) {
+    return mockSignIn();
+  }
+  
+  // Add signUp method even though it's not in the interface yet
+  // This is to prepare for future refactoring of the signup.js handler
+  async signUp(email, password) {
+    return mockSignUp();
+  }
+}
+
+// Mock the DbFactory to return our mock datasource
+jest.mock('../utils/dbFactory', () => ({
+  getDatabaseInstance: jest.fn(() => new MockDatasource())
+}));
+
+// For signup.js which still uses Supabase directly
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
     auth: {
-      signUp: jest.fn().mockImplementation(() => mockSignUp()),
-      signInWithPassword: jest.fn().mockImplementation(() => mockSignInWithPassword())
+      signUp: jest.fn().mockImplementation(() => mockSignUp())
     }
   }))
 }));
@@ -36,6 +55,7 @@ describe('Authentication Flow Integration', () => {
     // Set environment variables
     process.env.SUPABASE_URL = 'https://test.supabase.co';
     process.env.SUPABASE_ANON_KEY = 'test-anon-key';
+    process.env.DB_TYPE = 'supabase';
   });
 
   it('should handle signup failure gracefully', async () => {
@@ -77,7 +97,7 @@ describe('Authentication Flow Integration', () => {
     });
 
     // Set up mock responses for failed signin
-    mockSignInWithPassword = jest.fn().mockResolvedValue({
+    mockSignIn = jest.fn().mockResolvedValue({
       data: { user: null, session: null },
       error: {
         message: 'Invalid login credentials',

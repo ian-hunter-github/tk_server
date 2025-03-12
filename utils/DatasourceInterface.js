@@ -1,6 +1,7 @@
 class DatasourceInterface {
     async signIn(email, password) { throw new Error('Method signIn() not implemented'); }
     async signOut() { throw new Error('Method signOut() not implemented'); }
+    async getUser(accessToken) { throw new Error('Method getUser() not implemented'); }
     async fetchAllProjects(userId) { throw new Error('Method fetchAllProjects() not implemented'); }
     async fetchProjectById(userId, projectId) { throw new Error('Method fetchProjectById() not implemented'); }
     async fetchProjectsByIds(userId, projectIds) { throw new Error('Method fetchProjectsByIds() not implemented'); }

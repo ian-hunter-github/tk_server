@@ -1,10 +1,25 @@
 const { handler } = require('../netlify/functions/session');
-const { createClient } = require('@supabase/supabase-js');
 const { CORS_HEADERS } = require('../utils/CORS_HEADERS');
 const { getSessionToken } = require('../utils/getSessionToken');
+const DatasourceInterface = require('../utils/DatasourceInterface');
 
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(),
+// Create a mock implementation of DatasourceInterface
+class MockDatasource extends DatasourceInterface {
+  async getUser(accessToken) {
+    return this.mockGetUserResponse;
+  }
+  
+  setMockGetUserResponse(response) {
+    this.mockGetUserResponse = response;
+  }
+}
+
+// Create an instance of the mock datasource
+const mockDatasource = new MockDatasource();
+
+// Mock the DbFactory to return our mock datasource
+jest.mock('../utils/dbFactory', () => ({
+  getDatabaseInstance: jest.fn(() => mockDatasource)
 }));
 
 jest.mock('../utils/CORS_HEADERS', () => ({
@@ -20,18 +35,11 @@ jest.mock('../utils/getSessionToken', () => ({
 }));
 
 describe('Session Handler', () => {
-  let mockSupabase;
-
   beforeEach(() => {
-    mockSupabase = {
-      auth: {
-        getUser: jest.fn(),
-      },
-    };
-    createClient.mockReturnValue(mockSupabase);
     // Reset environment variables before each test
     process.env.SUPABASE_URL = 'test_url';
     process.env.SUPABASE_ANON_KEY = 'test_key';
+    process.env.DB_TYPE = 'supabase';
   });
 
   afterEach(() => {
@@ -60,7 +68,7 @@ describe('Session Handler', () => {
   it('returns 401 if Supabase returns an error', async () => {
     const event = { httpMethod: 'GET', headers: { Authorization: 'Bearer token' } };
     getSessionToken.mockReturnValue('token');
-    mockSupabase.auth.getUser.mockResolvedValue({
+    mockDatasource.setMockGetUserResponse({
       data: { user: null },
       error: { message: 'Invalid token' },
     });
@@ -73,7 +81,7 @@ describe('Session Handler', () => {
   it('returns 401 if no user is found', async () => {
     const event = { httpMethod: 'GET', headers: { Authorization: 'Bearer token' } };
     getSessionToken.mockReturnValue('token');
-    mockSupabase.auth.getUser.mockResolvedValue({
+    mockDatasource.setMockGetUserResponse({
       data: { user: null },
       error: null,
     });
@@ -87,7 +95,7 @@ describe('Session Handler', () => {
     const event = { httpMethod: 'GET', headers: { Authorization: 'Bearer token' } };
     const mockUser = { id: '123', email: 'test@example.com' };
     getSessionToken.mockReturnValue('token');
-    mockSupabase.auth.getUser.mockResolvedValue({ data: { user: mockUser }, error: null });
+    mockDatasource.setMockGetUserResponse({ data: { user: mockUser }, error: null });
     const response = await handler(event);
     expect(response.statusCode).toBe(200);
     expect(response.body).toBe(JSON.stringify({ user: mockUser }));
@@ -113,7 +121,7 @@ describe('Session Handler', () => {
     it('returns 500 on unexpected error', async () => {
         const event = { httpMethod: 'GET', headers: { Authorization: 'Bearer token' } };
         getSessionToken.mockReturnValue('token');
-        mockSupabase.auth.getUser.mockRejectedValue(new Error('Unexpected error'));
+        mockDatasource.setMockGetUserResponse(Promise.reject(new Error('Unexpected error')));
         const response = await handler(event);
         expect(response.statusCode).toBe(500);
         expect(response.body).toBe(JSON.stringify({ error: 'Failed to retrieve user data.' }));

@@ -15,6 +15,10 @@ class SupabaseDB extends DatasourceInterface {
         return this.supabase.auth.signOut();
     }
     
+    async getUser(accessToken) {
+        return this.supabase.auth.getUser(accessToken);
+    }
+    
     async fetchAllProjects(userId) {
         return this.supabase.from('projects').select('*').eq('created_by', userId);
     }

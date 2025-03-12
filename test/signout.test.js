@@ -1,5 +1,4 @@
 const { handler } = require('../netlify/functions/signout.js');
-const { createClient } = require('@supabase/supabase-js');
 const cookie = require('cookie');
 
 // Mock Supabase client
@@ -10,10 +9,6 @@ jest.mock('@supabase/supabase-js', () => ({
     }
   }))
 }));
-
-// Mock environment variables
-process.env.SUPABASE_URL = 'https://bqumdvfrgjcwcnbdbrps.supabase.co';
-process.env.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxdW1kdmZyZ2pjd2NuYmRicnBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk4ODQ3NDIsImV4cCI6MjA1NTQ2MDc0Mn0.1u8pE3cLH6YjQIW1aiYUbyGiZ8__tb-ybChNf961fuE';
 
 // Mock the CORS headers utility
 jest.mock('../utils/CORS_HEADERS', () => ({

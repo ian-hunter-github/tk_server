@@ -1,6 +1,6 @@
-const { createClient } = require("@supabase/supabase-js");
 const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
 const { getSessionToken } = require("../../utils/getSessionToken");
+const { getDatabaseInstance } = require('../../utils/dbFactory.js');
 
 // Debug flag
 const DEBUG = true;
@@ -32,7 +32,7 @@ exports.handler = async (event) => {
     };
   }
 
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const db = getDatabaseInstance();
 
   if (event.httpMethod === "GET") {
     try {
@@ -50,7 +50,7 @@ exports.handler = async (event) => {
       const {
         data: { user },
         error,
-      } = await supabase.auth.getUser(accessToken);
+      } = await db.getUser(accessToken);
       if (DEBUG) console.log("[Session] Supabase user:", user);
 
       if (error || !user) {

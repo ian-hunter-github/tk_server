@@ -1,45 +1,10 @@
-const { handler } = require('../netlify/functions/scores');
+const { handler } = require("../netlify/functions/scores");
 const { v4: uuidv4 } = require("uuid");
+const { getDatabaseInstance } = require('../utils/dbFactory');
 
-// Mock Supabase client
-const mockSelect = jest.fn();
-const mockUpsert = jest.fn();
-const mockSingle = jest.fn();
-
-const mockSupabase = {
-  from: jest.fn().mockReturnThis(),
-  select: jest.fn().mockImplementation(() => {
-    mockSelect();
-    return {
-      single: mockSingle
-    };
-  }),
-  upsert: jest.fn().mockImplementation(() => {
-    mockUpsert();
-    return {
-      select: jest.fn().mockReturnThis(),
-      single: mockSingle
-    };
-  }),
-  auth: {
-    getUser: jest.fn().mockResolvedValue({
-      data: { user: { id: "1" } },
-      error: null,
-    }),
-  },
-};
-
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => mockSupabase),
-}));
-
-// Mock CORS headers
-jest.mock("../utils/CORS_HEADERS", () => ({
-  CORS_HEADERS: () => ({
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, userId",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  }),
+// Mock the DatasourceInterface
+jest.mock('../utils/dbFactory', () => ({
+  getDatabaseInstance: jest.fn(),
 }));
 
 describe("Scores API", () => {
@@ -48,20 +13,19 @@ describe("Scores API", () => {
     criteria_id: uuidv4(),
     choice_id: uuidv4(),
     score: 4,
-    userId: "1",
+    created_by: userId,
   };
 
+  let mockDb;
+
   beforeEach(() => {
-    // Reset all mocks
     jest.clearAllMocks();
 
-    // Set environment variables
-    process.env.SUPABASE_URL = "https://test.supabase.co";
-    process.env.SUPABASE_ANON_KEY = "test-key";
-
-    // Set up default mock responses
-    mockSingle.mockResolvedValue({ data: mockScore, error: null });
-    mockUpsert.mockReturnValue({ data: mockScore, error: null });
+    mockDb = {
+        signIn: jest.fn().mockResolvedValue({ data: { user: { id: userId } } }),
+        updateScore: jest.fn().mockResolvedValue({ data: mockScore, error: null }),
+    };
+    getDatabaseInstance.mockReturnValue(mockDb);
   });
 
   it("PUT /scores should create or update a score", async () => {
@@ -77,17 +41,8 @@ describe("Scores API", () => {
 
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body)).toEqual(mockScore);
-    expect(mockSupabase.from).toHaveBeenCalledWith("scores");
-    expect(mockUpsert).toHaveBeenCalled();
-    expect(mockSupabase.upsert).toHaveBeenCalledWith(
-      {
-        criteria_id: mockScore.criteria_id,
-        choice_id: mockScore.choice_id,
-        score: mockScore.score,
-        created_by: mockScore.userId,
-      },
-      { onConflict: "criteria_id,choice_id" }
-    );
+    expect(mockDb.signIn).toHaveBeenCalledWith(null, null, 'mock-token');
+    expect(mockDb.updateScore).toHaveBeenCalledWith(userId, mockScore.criteria_id, mockScore.choice_id, mockScore.score);
   });
 
     it("PUT /scores should return 401 if no userId provided", async () => {
@@ -113,12 +68,11 @@ describe("Scores API", () => {
       body: JSON.stringify({
         choice_id: "1",
         score: 4,
-        userId: "1",
+        created_by: "1",
       }),
     };
 
     const response = await handler(event);
-
     expect(response.statusCode).toBe(500);
     expect(JSON.parse(response.body).error).toBe("Invalid request body: criteria_id, choice_id, and score are required");
   });
@@ -132,7 +86,7 @@ describe("Scores API", () => {
       body: JSON.stringify({
         criteria_id: "1",
         score: 4,
-        userId: "1",
+        created_by: "1",
       }),
     };
 
@@ -151,7 +105,7 @@ describe("Scores API", () => {
       body: JSON.stringify({
         criteria_id: "1",
         choice_id: "1",
-        userId: "1",
+        created_by: "1",
       }),
     };
 
@@ -171,7 +125,7 @@ describe("Scores API", () => {
         criteria_id: "1",
         choice_id: "1",
         score: 6,
-        userId: "1",
+        created_by: "1",
       }),
     };
 
