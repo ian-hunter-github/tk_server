@@ -28,7 +28,7 @@ exports.handler = async (event) => {
       .find((c) => c.trim().startsWith("sb-auth-token="));
     if (sessionCookie) {
       const token = sessionCookie.split("=")[1];
-      const { data, error } = await db.signIn(null, null, token);
+      const { data, error } = await db.getUser(token);
       if (error) {
         console.error('Error getting user:', error);
         return {

@@ -24,6 +24,7 @@ describe("Scores API", () => {
     mockDb = {
         signIn: jest.fn().mockResolvedValue({ data: { user: { id: userId } } }),
         updateScore: jest.fn().mockResolvedValue({ data: mockScore, error: null }),
+        getUser: jest.fn().mockResolvedValue({ data: { user: { id: userId } } }),
     };
     getDatabaseInstance.mockReturnValue(mockDb);
   });
@@ -41,8 +42,8 @@ describe("Scores API", () => {
 
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body)).toEqual(mockScore);
-    expect(mockDb.signIn).toHaveBeenCalledWith(null, null, 'mock-token');
     expect(mockDb.updateScore).toHaveBeenCalledWith(userId, mockScore.criteria_id, mockScore.choice_id, mockScore.score);
+    
   });
 
     it("PUT /scores should return 401 if no userId provided", async () => {

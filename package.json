@@ -3,10 +3,9 @@
   "version": "1.0.0",
   "description": "Serverless functions for Kepner-Tregoe app",
   "scripts": {
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest"
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --silent"
   },
   "jest": {
-    "setupFilesAfterEnv": ["./test/setup.js"],
     "transform": {
       "^.+\\.js$": [
         "babel-jest",

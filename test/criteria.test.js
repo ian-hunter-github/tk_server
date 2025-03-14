@@ -29,7 +29,7 @@ describe("criteria API", () => {
             fetchChoices: jest.fn().mockResolvedValue({data: [], error: null}),
             // updateProject: jest.fn().mockResolvedValue({ data: mockCriteria[0], error: null }), // Not implemented yet
             // deleteProject: jest.fn().mockResolvedValue({ data: null, error: null }), // Not implemented yet
-
+            getUser: jest.fn().mockResolvedValue({ data: { user: { id: userId } } }),
         };
         getDatabaseInstance.mockReturnValue(mockDb);
     });
@@ -44,7 +44,6 @@ describe("criteria API", () => {
         const response = await handler(event);
         expect(response.statusCode).toBe(200);
         expect(JSON.parse(response.body)).toEqual(mockCriteria);
-        expect(mockDb.signIn).toHaveBeenCalledWith(null, null, userId);
         expect(mockDb.fetchCriteria).toHaveBeenCalledWith(userId, projectId);
     });
 
@@ -72,7 +71,6 @@ describe("criteria API", () => {
     const response = await handler(event);
     expect(response.statusCode).toBe(201);
     expect(JSON.parse(response.body)).toEqual(mockCriteria);
-    expect(mockDb.signIn).toHaveBeenCalledWith(null, null, userId);
     expect(mockDb.createCriteria).toHaveBeenCalledWith(userId, projectId, mockCriteria);
   });
 
@@ -90,17 +88,16 @@ describe("criteria API", () => {
         expect(response.statusCode).toBe(401);
     });
 
-//   it("DELETE /criteria/:id should delete a choice with userId", async () => {
-//     const event = {
-//       httpMethod: "DELETE",
-//       headers: { cookie: `sb-auth-token=${userId}` },
-//       pathParameters: { id: criteriaId_1 },
-//     };
+  it("DELETE /criteria/:id should delete a choice with userId", async () => {
+    const event = {
+      httpMethod: "DELETE",
+      headers: { cookie: `sb-auth-token=${userId}` },
+      pathParameters: { id: criteriaId_1 },
+    };
 
-//     const response = await handler(event);
-//     expect(response.statusCode).toBe(200);
-//     expect(JSON.parse(response.body)).toEqual({ message: "Criterion deleted successfully" });
-//     expect(mockDb.signIn).toHaveBeenCalledWith(null, null, userId);
-//     expect(mockDb.deleteProject).toHaveBeenCalledWith(userId, criteriaId_1); // Not implemented
-//   });
+    const response = await handler(event);
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({ message: "Criterion deleted successfully" });
+  });
+
 });

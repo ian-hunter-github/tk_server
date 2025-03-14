@@ -95,12 +95,35 @@ Retrieves all projects for the authenticated user.
     "title": "Project Title",
     "description": "Project Description",
     "created_by": "user-uuid",
-    "created_at": "2025-02-24T14:00:00Z"
+    "created_at": "2025-02-24T14:00:00Z",
+    "criteria": [
+      {
+        "id": "criteria-uuid",
+        "project_id": "project-uuid",
+        "definition": "Criterion Definition",
+        "weight": 3,
+        "created_by": "user-uuid"
+      }
+    ],
+    "choices": [
+      {
+        "id": "choice-uuid",
+        "project_id": "project-uuid",
+        "description": "Choice Description",
+        "disqualified": false,
+        "created_by": "user-uuid",
+        "scores": {
+          "criteria-uuid": 4
+        },
+        "total_score": 12
+      }
+    ]
   }
 ]
 ```
 **Notes**:
 - The server automatically extracts the `userId` from the session token in the `sb-auth-token` cookie.
+- Includes `criteria`, `choices`, and calculated `scores` within each choice in the response.
 
 ### Get Project
 **Endpoint**: `GET /.netlify/functions/projects/:id`  
@@ -114,33 +137,33 @@ Retrieves a specific project by ID.
   "description": "Project Description",
   "created_by": "user-uuid",
   "created_at": "2025-02-24T14:00:00Z",
-    "criteria": [
-        {
-            "id": "criteria-uuid",
-            "project_id": "project-uuid",
-            "definition": "Criterion Definition",
-            "weight": 3,
-            "created_by": "user-uuid"
-        }
-    ],
-    "choices": [
-        {
-            "id": "choice-uuid",
-            "project_id": "project-uuid",
-            "description": "Choice Description",
-            "disqualified": false,
-            "created_by": "user-uuid",
-            "scores": {
-                "criteria-uuid": 4
-            },
-            "total_score": 12
-        }
-    ]
+  "criteria": [
+    {
+      "id": "criteria-uuid",
+      "project_id": "project-uuid",
+      "definition": "Criterion Definition",
+      "weight": 3,
+      "created_by": "user-uuid"
+    }
+  ],
+  "choices": [
+    {
+      "id": "choice-uuid",
+      "project_id": "project-uuid",
+      "description": "Choice Description",
+      "disqualified": false,
+      "created_by": "user-uuid",
+      "scores": {
+        "criteria-uuid": 4
+      },
+      "total_score": 12
+    }
+  ]
 }
 ```
 **Notes**:
 - The server automatically extracts the `userId` from the session token in the `sb-auth-token` cookie.
-- Includes `criteria`, `choices`, and `scores` in the response.
+- Includes `criteria`, `choices`, and calculated `scores` within each choice in the response.
 
 ### Create Project
 **Endpoint**: `POST /.netlify/functions/projects`  
@@ -631,7 +654,7 @@ interface Criterion {
   project_id: string;
   definition: string;
   weight: number;
-  user_id: string;
+  created_by: string;
 }
 ```
 
@@ -643,33 +666,10 @@ interface Choice {
   project_id: string;
   description: string;
   disqualified: boolean;
-  user_id: string;
+  created_by: string;
 }
 ```
 
-### Criterion
-
-```typescript
-interface Criterion {
-  id: string;
-  project_id: string;
-  definition: string;
-  weight: number;
-  created_by: string; // Use created_by instead of user_id
-}
-```
-
-### Choice
-
-```typescript
-interface Choice {
-  id: string;
-  project_id: string;
-  description: string;
-  disqualified: boolean;
-  created_by: string; // Use created_by instead of user_id
-}
-```
 ### Score
 
 ```typescript
@@ -677,7 +677,7 @@ interface Score {
   criteria_id: string;
   choice_id: string;
   score: number;
-  created_by: string; // Use created_by instead of user_id
+  created_by: string;
 }
 ```
 

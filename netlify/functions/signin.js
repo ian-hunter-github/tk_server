@@ -3,7 +3,7 @@ const { getDatabaseInstance } = require('../../utils/dbFactory.js');
 const { CORS_HEADERS } = require("../../utils/CORS_HEADERS");
 
 // Debug flag
-const DEBUG = true;
+const DEBUG = false;
 
 exports.handler = async (event) => {
 

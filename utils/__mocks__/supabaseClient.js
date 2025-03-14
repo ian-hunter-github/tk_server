@@ -2,7 +2,7 @@ const { v4: uuidv4 } = require("uuid");
 
 const mockUser = {
   id: "test-user-id",
-  email: "test@example.com",
+  email: "testXXX@example.com",
 };
 
 const mockSession = {

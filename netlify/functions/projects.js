@@ -6,111 +6,93 @@ const cookie = require("cookie");
 // Debug flag
 const DEBUG = true;
 
+
 // Helper function to fetch projects
 async function fetchProjects(db, userId, projectId = null) {
-  if (DEBUG)
-    console.log(
-      "[projects] Fetching projects for user:",
-      userId,
-      "Project ID:",
-      projectId
-    );
+    if (DEBUG) console.log("[projects] Fetching projects for user:", userId, "Project ID:", projectId);
 
-  try {
-    const { data: projects, error } = await db.fetchProjects(userId, projectId);
-
-    if (error) {
-      throw error;
-    }
-
-    if (DEBUG) console.log("[projects] Fetched projects:", projects);
-
-    if (projectId && projects) {
-      // Fetch related criteria and choices
-      const { data: criteria, error: criteriaError } = await db.fetchCriteria(userId, projectId);
-      if(criteriaError) {
-        throw criteriaError;
-      }
-      console.log("[fetchProjects] Fetched criteria:", criteria);
-      const { data: choices, error: choicesError } = await db.fetchChoices(userId, projectId);
-      if(choicesError){
-        throw choicesError;
-      }
-      console.log("[fetchProjects] Fetched choices:", choices);
-
-      let scoresMap = {};
-      if (choices.length > 0) {
-        // Fetch scores for the project
-        const choiceIds = choices.map((c) => c.id);
-        console.log("[fetchProjects] Fetching scores with choice IDs:", choiceIds);
-        const { data: scores, error: scoresError } = await db.fetchScores(choiceIds);
-        console.log("[fetchProjects] Fetched scores:", scores);
-
-        if (scoresError) {
-          throw scoresError;
+    try {
+        let projects;
+        if (projectId) {
+            // Fetch single project
+            const { data, error } = await db.fetchProjectById(userId, projectId);
+            if (error) {
+                throw error;
+            }
+            projects = data ? [data] : []; // Wrap single project in an array, or empty array if null
+        } else {
+            // Fetch all projects
+            if (DEBUG) console.log("[projects] Fetching all projects for user:", userId);
+            const { data, error } = await db.fetchAllProjects(userId);
+            if (DEBUG) console.log("[projects] Result from db.fetchAllProjects:", data, error);
+            if (error) {
+                throw error;
+            }
+            projects = data || []; // Ensure projects is an array even if data is null
         }
 
-        // Create a map for efficient score lookup
-        scores.forEach((score) => {
-          scoresMap[`${score.choice_id}_${score.criteria_id}`] = score.score;
-        });
-      }
+        if (DEBUG) console.log("[projects] Fetched projects:", projects);
 
-      console.log("[fetchProjects] scoresMap:", scoresMap);
+        // Fetch related criteria, choices, and scores for each project
+        const projectsWithDetails = await Promise.all(
+            projects.map(async (project) => {
+                const { data: criteria, error: criteriaError } = await db.fetchCriteria(userId, project.id);
+                if (criteriaError) {
+                    throw criteriaError;
+                }
+                if (DEBUG) console.log("[fetchProjects] Fetched criteria:", criteria);
 
-      // Attach scores to choices and calculate total score
-      const updatedChoices = choices.map((choice) => {
-        console.log("[fetchProjects] Processing choice:", choice);
-        let totalScore = 0;
-        const choiceScores = {};
-        if (criteria.length > 0) {
-          criteria.forEach((criterion) => {
-            console.log("[fetchProjects] Processing criterion:", criterion);
-            const score = scoresMap[`${choice.id}_${criterion.id}`] || 0;
-            choiceScores[criterion.id] = score;
-            totalScore += score * (criterion.weight || 0); // Ensure weight is defined
-          });
-        }
-        return { ...choice, scores: choiceScores, total_score: totalScore };
-      });
+                const { data: choices, error: choicesError } = await db.fetchChoices(userId, project.id);
+                if (choicesError) {
+                    throw choicesError;
+                }
+                if (DEBUG) console.log("[fetchProjects] Fetched choices:", choices);
 
-      // Add criteria and choices to the project data.
-      return { ...projects, criteria, choices: updatedChoices };
+                let scoresMap = {};
+                if (choices && choices.length > 0) {
+                    const choiceIds = choices.map((c) => c.id);
+                    if (DEBUG) console.log("[fetchProjects] Fetching scores with choice IDs:", choiceIds);
+                    const { data: scores, error: scoresError } = await db.fetchScores(choiceIds);
+                    if (scoresError) {
+                        throw scoresError;
+                    }
+                    if (DEBUG) console.log("[fetchProjects] Fetched scores:", scores);
+
+                    scores.forEach((score) => {
+                        scoresMap[`${score.choice_id}_${score.criteria_id}`] = score.score;
+                    });
+                }
+
+                if (DEBUG) console.log("[fetchProjects] scoresMap:", scoresMap);
+
+                const updatedChoices = (choices || []).map((choice) => {
+                    if (DEBUG) console.log("[fetchProjects] Processing choice:", choice);
+                    let totalScore = 0;
+                    const choiceScores = {};
+                    if(criteria && criteria.length > 0) {
+                        criteria.forEach((criterion) => {
+                            if (DEBUG) console.log("[fetchProjects] Processing criterion:", criterion);
+                            const score = scoresMap[`${choice.id}_${criterion.id}`] || 0;
+                            choiceScores[criterion.id] = score;
+                            totalScore += score * (criterion.weight || 0);
+                        });
+                    }
+                    return { ...choice, scores: choiceScores, total_score: totalScore };
+
+                });
+
+                return { ...project, criteria: criteria || [], choices: updatedChoices };
+            })
+        );
+
+      return projectsWithDetails.length === 1 && projectId ? projectsWithDetails[0] : projectsWithDetails;
+
+    } catch (error) {
+        console.error("Error fetching project(s):", error);
+        throw error;
     }
-
-    return projects;
-  } catch (error) {
-    console.error("Error fetching project(s):", error);
-    throw error;
-  }
 }
 
-// Helper function to fetch criteria for a project
-async function fetchCriteria(db, projectId, userId) {
-    if (DEBUG) console.log("Fetching criteria for project:", projectId, "user:", userId);
-  const { data, error } = await db.fetchCriteria(userId, projectId);
-
-  if (error) {
-    throw error;
-  }
-  if (DEBUG) console.log("Fetched criteria:", data);
-
-  return data;
-}
-
-// Helper function to fetch choices for a project
-async function fetchChoices(db, projectId, userId) {
-  if (DEBUG)
-    console.log("Fetching choices for project:", projectId, "user:", userId);
-  const { data, error } = await db.fetchChoices(userId, projectId);
-
-  if (error) {
-    throw error;
-  }
-
-  if (DEBUG) console.log("Fetched choices:", data);
-  return data;
-}
 
 // Helper function to create project
 async function createProject(db, userId, payload) {
@@ -120,6 +102,7 @@ async function createProject(db, userId, payload) {
   const { data, error } = await db.createProject(userId, payload);
 
   if (error) {
+    console.error("Error creating project:", error); // Log the error
     throw error;
   }
 
@@ -164,11 +147,22 @@ async function deleteProject(db, userId, projectId) {
 }
 
 exports.handler = async (event) => {
+  // Handle OPTIONS requests immediately
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 204,
+      headers: { ...CORS_HEADERS(event) },
+      body: "",
+    };
+  }
+
   try {
     if (DEBUG) {
       console.log("[projects] Received", event);
       console.log("[projects] CORS_HEADERS:", CORS_HEADERS(event));
     }
+
+    console.log("[projects] process.env.NODE_ENV:", process.env.NODE_ENV); // Log NODE_ENV
 
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
@@ -190,34 +184,30 @@ exports.handler = async (event) => {
       return { statusCode, headers, body };
     }
 
+    // Extract the token from the Authorization header or cookie
+    let token = null;
+    const authHeader = event.headers.authorization || event.headers.Authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.split(" ")[1];
+    } else {
+      const cookies = cookie.parse(event.headers.cookie || "");
+      token = cookies["sb-auth-token"];
+    }
+
+    // Don't throw an error if no token is provided. Let the db.getUser
+    // function handle authentication failures for protected routes.
+
     // Handle different HTTP methods
     switch (event.httpMethod) {
-      case "OPTIONS":
-        return {
-          statusCode: 204,
-          headers: { ...CORS_HEADERS(event) },
-          body: "",
-        };
       case "GET":
       case "POST":
       case "PUT":
       case "DELETE":
-        // Extract the token from the cookie
-        const cookies = cookie.parse(event.headers.cookie || "");
-        const token = cookies["sb-auth-token"];
-
-        if (!token) {
-          throw new Error("Unauthorized: No token provided");
-        }
-
-        console.log("Auth Header:", event.headers.authorization);
-        console.log("[projects] event:", event);
-        console.log("[projects] cookies:", cookies);
-        console.log("[projects] token:", token);
-
         const db = getDatabaseInstance();
 
-        const { data: { user }, error: authError } = await db.signIn(null, null, token);
+        // Even if token is null, db.getUser will handle it
+        const { data: { user }, error: authError } = await db.getUser(token);
+        console.log("[projects] Result from db.getUser:", user, authError); // Log user and error
 
         if (authError || !user) {
           console.error("Authentication error:", authError);
@@ -225,6 +215,7 @@ exports.handler = async (event) => {
         }
 
         const userId = user.id;
+        console.log("[projects] userId:", userId); // Log userId
         let responseData;
 
         if (event.httpMethod === "GET") {

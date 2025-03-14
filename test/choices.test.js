@@ -35,6 +35,7 @@ describe("Choices API", () => {
         .fn()
         .mockResolvedValue({ data: mockChoices[0], error: null }),
       deleteChoice: jest.fn().mockResolvedValue({ data: null, error: null }),
+      getUser: jest.fn().mockResolvedValue({ data: { user: { id: userId } } }),
     };
     getDatabaseInstance.mockReturnValue(mockDb);
   });
@@ -49,7 +50,6 @@ describe("Choices API", () => {
     const response = await handler(event);
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body)).toEqual(mockChoices);
-    expect(mockDb.signIn).toHaveBeenCalledWith(null, null, userId);
     expect(mockDb.fetchChoices).toHaveBeenCalledWith(userId, projectId);
   });
 
@@ -77,7 +77,6 @@ describe("Choices API", () => {
     const response = await handler(event);
     expect(response.statusCode).toBe(201);
     expect(JSON.parse(response.body)).toEqual(mockChoices);
-    expect(mockDb.signIn).toHaveBeenCalledWith(null, null, userId);
     expect(mockDb.createChoices).toHaveBeenCalledWith(
       userId,
       projectId,
@@ -111,7 +110,6 @@ describe("Choices API", () => {
 
     const response = await handler(event);
     expect(response.statusCode).toBe(200);
-    expect(mockDb.signIn).toHaveBeenCalledWith(null, null, userId);
     expect(mockDb.updateChoice).toHaveBeenCalledWith(userId, choiceId_1, {
       name: "Updated Choice",
     });
@@ -129,7 +127,6 @@ describe("Choices API", () => {
     expect(JSON.parse(response.body)).toEqual({
       message: "Choice deleted successfully",
     });
-    expect(mockDb.signIn).toHaveBeenCalledWith(null, null, userId);
     expect(mockDb.deleteChoice).toHaveBeenCalledWith(userId, choiceId_1);
   });
 });

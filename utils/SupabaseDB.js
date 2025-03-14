@@ -2,11 +2,12 @@ const { createClient } = require('@supabase/supabase-js');
 const DatasourceInterface = require('./DatasourceInterface');
 
 class SupabaseDB extends DatasourceInterface {
-    constructor() {
+    constructor(isTestEnvironment = false) {
         super();
-        this.supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+        const supabaseKey = isTestEnvironment ? process.env.SUPABASE_SERVICE_ROLE_KEY : process.env.SUPABASE_ANON_KEY;
+        this.supabase = createClient(process.env.SUPABASE_URL, supabaseKey);
     }
-    
+
     async signIn(email, password) {
         return this.supabase.auth.signInWithPassword({ email, password });
     }
@@ -29,6 +30,11 @@ class SupabaseDB extends DatasourceInterface {
     
     async fetchCriteria(userId, projectId) {
         return this.supabase.from('criteria').select('*').eq('project_id', projectId).eq('created_by', userId);
+    }
+
+    async createProject(userId, projectData) {
+        console.log("[SupabaseDB] createProject called with userId:", userId, "projectData:", projectData);
+        return this.supabase.from('projects').insert({ created_by: userId, title: projectData.title, description: projectData.description }).select();
     }
     
     async createCriteria(userId, projectId, criteria) {
