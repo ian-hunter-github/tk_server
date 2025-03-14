@@ -170,8 +170,7 @@ exports.handler = async (event) => {
       const updates = JSON.parse(event.body);
 
       // Update criterion
-      // TODO: updateProject does not exist
-      const { data: updatedCriterion, error } = {} //await db.updateProject(userId, criterionId, updates);
+      const { data: updatedCriterion, error } = await db.updateCriterion(userId, criterionId, updates);
 
       if (DEBUG) console.log("Supabase update result:", { updatedCriterion, error });
 
@@ -198,39 +197,39 @@ exports.handler = async (event) => {
     }
   }
 
-  // Handle the DELETE request
-  if (event.httpMethod === "DELETE") {
-    try {
-      if (DEBUG) console.log("DELETE request received");
+    // Handle the DELETE request
+    if (event.httpMethod === "DELETE") {
+        try {
+          if (DEBUG) console.log("DELETE request received");
 
-      // Get criterion ID from path parameters
-      const { id: criterionId, error: pathError, statusCode: pathStatusCode, headers: pathHeaders, body: pathBody } = getPathId(event, "criteria");
-      if (pathError) {
-        return { statusCode: pathStatusCode, headers: pathHeaders, body: pathBody };
+          // Get criterion ID from path parameters
+          const { id: criterionId, error: pathError, statusCode: pathStatusCode, headers: pathHeaders, body: pathBody } = getPathId(event, "criteria");
+          if (pathError) {
+            return { statusCode: pathStatusCode, headers: pathHeaders, body: pathBody };
+          }
+
+          // Delete criterion
+          const { error } = await db.deleteCriterion(userId, criterionId);
+
+          if (error) {
+            throw error;
+          }
+
+          return {
+            statusCode: 200,
+            headers: { ...CORS_HEADERS(event) },
+            body: JSON.stringify({ message: "Criterion deleted successfully" }),
+          };
+
+        } catch (error) {
+          console.error("Error:", error.message);
+          return {
+            statusCode: error.message.startsWith("Unauthorized") ? 401 : 500,
+            headers: { ...CORS_HEADERS(event) },
+            body: JSON.stringify({ error: error.message }),
+          };
+        }
       }
-
-      // Delete criterion
-      // TODO: deleteProject does not exist
-      const { error } = {} //await db.deleteProject(userId, criterionId);
-
-      if (error) {
-        throw error;
-      }
-
-      return {
-        statusCode: 200,
-        headers: { ...CORS_HEADERS(event) },
-        body: JSON.stringify({ message: "Criterion deleted successfully" }),
-      };
-    } catch (error) {
-      console.error("Error:", error.message);
-      return {
-        statusCode: error.message.startsWith("Unauthorized") ? 401 : 500,
-        headers: { ...CORS_HEADERS(event) },
-        body: JSON.stringify({ error: error.message }),
-      };
-    }
-  }
 
   // Default response for unsupported methods
   if (DEBUG) console.log("Method not allowed");
