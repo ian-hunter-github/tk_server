@@ -29,6 +29,7 @@ describe("criteria API", () => {
             fetchChoices: jest.fn().mockResolvedValue({data: [], error: null}),
             // updateProject: jest.fn().mockResolvedValue({ data: mockCriteria[0], error: null }), // Not implemented yet
             // deleteProject: jest.fn().mockResolvedValue({ data: null, error: null }), // Not implemented yet
+            deleteCriterion: jest.fn().mockResolvedValue({ data: null, error: null }), // Not implemented yet
             getUser: jest.fn().mockResolvedValue({ data: { user: { id: userId } } }),
         };
         getDatabaseInstance.mockReturnValue(mockDb);
