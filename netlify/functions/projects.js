@@ -7,90 +7,53 @@ const cookie = require("cookie");
 const DEBUG = true;
 
 
-// Helper function to fetch projects
 async function fetchProjects(db, userId, projectId = null) {
-    if (DEBUG) console.log("[projects] Fetching projects for user:", userId, "Project ID:", projectId);
+  if (DEBUG) console.log("[projects] Fetching projects for user:", userId, "Project ID:", projectId);
 
-    try {
-        let projects;
-        if (projectId) {
-            // Fetch single project
-            const { data, error } = await db.fetchProjectById(userId, projectId);
-            if (error) {
-                throw error;
-            }
-            projects = data ? [data] : []; // Wrap single project in an array, or empty array if null
-        } else {
-            // Fetch all projects
-            if (DEBUG) console.log("[projects] Fetching all projects for user:", userId);
-            const { data, error } = await db.fetchAllProjects(userId);
-            if (DEBUG) console.log("[projects] Result from db.fetchAllProjects:", data, error);
-            if (error) {
-                throw error;
-            }
-            projects = data || []; // Ensure projects is an array even if data is null
-        }
+  try {
+      let projects;
 
-        if (DEBUG) console.log("[projects] Fetched projects:", projects);
+      if (projectId) {
+          // Fetch single project
+          const { data, error } = await db.fetchProjectById(userId, projectId);
+          if (error) {
+              throw error;
+          }
+          projects = data ? [data] : []; // Wrap single project in an array, or empty array if null
+      } else {
+          // Fetch all projects
+          const { data, error } = await db.fetchAllProjects(userId);
+          if (error) {
+              throw error;
+          }
+          projects = data || []; // Ensure projects is an array even if data is null
+      }
 
-        // Fetch related criteria, choices, and scores for each project
-        const projectsWithDetails = await Promise.all(
-            projects.map(async (project) => {
-                const { data: criteria, error: criteriaError } = await db.fetchCriteria(userId, project.id);
-                if (criteriaError) {
-                    throw criteriaError;
-                }
-                if (DEBUG) console.log("[fetchProjects] Fetched criteria:", criteria);
+      if (DEBUG) console.log("[projects] Fetched projects with criteria, choices, and scores:", projects);
 
-                const { data: choices, error: choicesError } = await db.fetchChoices(userId, project.id);
-                if (choicesError) {
-                    throw choicesError;
-                }
-                if (DEBUG) console.log("[fetchProjects] Fetched choices:", choices);
+      // Process scores and calculate total scores for choices
+      const projectsWithScores = projects.map((project) => {
+          const updatedChoices = (project.choices || []).map((choice) => {
+              let totalScore = 0;
+              const choiceScores = {};
 
-                let scoresMap = {};
-                if (choices && choices.length > 0) {
-                    const choiceIds = choices.map((c) => c.id);
-                    if (DEBUG) console.log("[fetchProjects] Fetching scores with choice IDs:", choiceIds);
-                    const { data: scores, error: scoresError } = await db.fetchScores(choiceIds);
-                    if (scoresError) {
-                        throw scoresError;
-                    }
-                    if (DEBUG) console.log("[fetchProjects] Fetched scores:", scores);
+              (project.criteria || []).forEach((criterion) => {
+                  const score = criterion.scores?.find((s) => s.choice_id === choice.id)?.score || 0;
+                  choiceScores[criterion.id] = score;
+                  totalScore += score * (criterion.weight || 0);
+              });
 
-                    scores.forEach((score) => {
-                        scoresMap[`${score.choice_id}_${score.criteria_id}`] = score.score;
-                    });
-                }
+              return { ...choice, scores: choiceScores, total_score: totalScore };
+          });
 
-                if (DEBUG) console.log("[fetchProjects] scoresMap:", scoresMap);
+          return { ...project, choices: updatedChoices };
+      });
 
-                const updatedChoices = (choices || []).map((choice) => {
-                    if (DEBUG) console.log("[fetchProjects] Processing choice:", choice);
-                    let totalScore = 0;
-                    const choiceScores = {};
-                    if(criteria && criteria.length > 0) {
-                        criteria.forEach((criterion) => {
-                            if (DEBUG) console.log("[fetchProjects] Processing criterion:", criterion);
-                            const score = scoresMap[`${choice.id}_${criterion.id}`] || 0;
-                            choiceScores[criterion.id] = score;
-                            totalScore += score * (criterion.weight || 0);
-                        });
-                    }
-                    return { ...choice, scores: choiceScores, total_score: totalScore };
-
-                });
-
-                return { ...project, criteria: criteria || [], choices: updatedChoices };
-            })
-        );
-
-      return projectsWithDetails.length === 1 && projectId ? projectsWithDetails[0] : projectsWithDetails;
-
-    } catch (error) {
-        console.error("Error fetching project(s):", error);
-        throw error;
-    }
+      return projectsWithScores.length === 1 && projectId ? projectsWithScores[0] : projectsWithScores;
+  } catch (error) {
+      console.error("Error fetching project(s):", error);
+      throw error;
+  }
 }
 
 
@@ -268,9 +231,16 @@ exports.handler = async (event) => {
     console.error("Error:", error.message);
     if (DEBUG) console.log("[projects] Error:", error.message);
     return {
-      statusCode: error.message.startsWith("Unauthorized") ? 401 : 500,
+      statusCode: getHttpErrorCode(error.message),
       headers: { ...CORS_HEADERS(event) },
       body: JSON.stringify({ error: error.message }),
     };
   }
+
+  function getHttpErrorCode(errMsg) {
+    if (errMsg.toLowerCase().startsWith("unauthorized")) return 401;
+    if (errMsg.toLowerCase().includes("not found")) return 404;
+    return 500
+  }
+
 };

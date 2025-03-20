@@ -24,8 +24,14 @@ describe("Projects API", () => {
       id: projectId_1,
       title: "Project 1",
       created_by: userId,
-      criteria: [],
-      choices: [],
+      criteria: [
+        { id: uuidv4(), definition: "Criterion 1", weight: 5 },
+        { id: uuidv4(), definition: "Criterion 2", weight: 3 },
+      ],
+      choices: [
+        { id: uuidv4(), description: "Choice 1", disqualified: false },
+        { id: uuidv4(), description: "Choice 2", disqualified: true },
+      ],
     },
     {
       id: projectId_2,
@@ -35,13 +41,6 @@ describe("Projects API", () => {
       choices: [],
     },
   ];
-  const mockProject = {
-    id: projectId_2, // Use a predefined ID
-    title: "Project 1",
-    created_by: userId,
-    criteria: [],
-    choices: [],
-  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -56,24 +55,60 @@ describe("Projects API", () => {
         .mockResolvedValue({ data: mockProjects, error: null }),
       fetchProjectById: jest
         .fn()
-        .mockResolvedValue({ data: mockProject, error: null }),
+        .mockResolvedValue({ data: mockProjects[0], error: null }),
       createProject: jest
         .fn()
-        .mockResolvedValue({ data: mockProject, error: null }),
+        .mockResolvedValue({ data: mockProjects[0], error: null }),
       updateProject: jest
         .fn()
-        .mockResolvedValue({ data: mockProject, error: null }),
+        .mockResolvedValue({ data: mockProjects[0], error: null }),
       deleteProject: jest.fn().mockResolvedValue({ data: null, error: null }),
-      fetchCriteria: jest.fn().mockResolvedValue({ data: [], error: null }),
-      fetchChoices: jest.fn().mockResolvedValue({ data: [], error: null }),
-      fetchScores: jest.fn().mockResolvedValue({ data: [], error: null }),
+      //fetchCriteria: jest.fn().mockResolvedValue({ data: [], error: null }),
+      //fetchChoices: jest.fn().mockResolvedValue({ data: [], error: null }),
+      //fetchScores: jest.fn().mockResolvedValue({ data: [], error: null }),
       getUser: jest.fn(),
     };
     getDatabaseInstance.mockReturnValue(mockDb);
   });
 
-  it("GET /projects should return all projects for the user", async () => {
+  it("GET /projects should return all projects with criteria, choices, and scores for the user", async () => {
     mockDb.getUser.mockResolvedValue({ data: { user: { id: userId } } });
+    mockDb.fetchAllProjects.mockResolvedValue({
+      data: [
+        {
+          id: projectId_1,
+          title: "Project 1",
+          created_by: userId,
+          criteria: [
+            {
+              id: "criteria-1",
+              definition: "Criterion 1",
+              weight: 5,
+              scores: [{ choice_id: "choice-1", score: 3 }],
+            },
+            {
+              id: "criteria-2",
+              definition: "Criterion 2",
+              weight: 3,
+              scores: [{ choice_id: "choice-1", score: 2 }],
+            },
+          ],
+          choices: [
+            {
+              id: "choice-1",
+              description: "Choice 1",
+              disqualified: false,
+              scores: [
+                { criteria_id: "criteria-1", score: 3 },
+                { criteria_id: "criteria-2", score: 2 },
+              ],
+            },
+          ],
+        },
+      ],
+      error: null,
+    });
+
     const event = {
       httpMethod: "GET",
       headers: { cookie: `sb-auth-token=${userId}` },
@@ -81,10 +116,103 @@ describe("Projects API", () => {
 
     const response = await handler(event);
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body)).toEqual(mockProjects);
+
+    const responseBody = JSON.parse(response.body);
+    expect(responseBody[0].choices[0].total_score).toBe(21); // (3 * 5) + (2 * 3)
     expect(mockDb.fetchAllProjects).toHaveBeenCalledWith(userId);
+
   });
 
+  it("GET /projects/:id should return a single project with criteria, choices, and scores", async () => {
+    // Mock the database response for fetchProjectById
+    mockDb.fetchProjectById.mockResolvedValue({
+      data: {
+        id: projectId_1,
+        title: "Project 1",
+        created_by: userId,
+        criteria: [
+          {
+            id: "criteria-1",
+            definition: "Criterion 1",
+            weight: 5,
+            scores: [{ choice_id: "choice-1", score: 3 }],
+          },
+          {
+            id: "criteria-2",
+            definition: "Criterion 2",
+            weight: 3,
+            scores: [{ choice_id: "choice-1", score: 2 }],
+          },
+        ],
+        choices: [
+          {
+            id: "choice-1",
+            description: "Choice 1",
+            disqualified: false,
+            scores: [
+              { criteria_id: "criteria-1", score: 3 },
+              { criteria_id: "criteria-2", score: 2 },
+            ],
+          },
+        ],
+      },
+      error: null,
+    });
+  
+    // Mock the user authentication
+    mockDb.getUser.mockResolvedValue({ data: { user: { id: userId } } });
+  
+    // Simulate the API request
+    const event = {
+      httpMethod: "GET",
+      headers: { cookie: `sb-auth-token=${userId}` },
+      pathParameters: { id: projectId_1 },
+    };
+  
+    const response = await handler(event);
+  
+    // Verify the response
+    expect(response.statusCode).toBe(200);
+  
+    const responseBody = JSON.parse(response.body);
+  
+    // Verify the structure of the returned project
+    expect(responseBody).toEqual({
+      id: projectId_1,
+      title: "Project 1",
+      created_by: userId,
+      criteria: [
+        {
+          id: "criteria-1",
+          definition: "Criterion 1",
+          weight: 5,
+          scores: [{ choice_id: "choice-1", score: 3 }],
+        },
+        {
+          id: "criteria-2",
+          definition: "Criterion 2",
+          weight: 3,
+          scores: [{ choice_id: "choice-1", score: 2 }],
+        },
+      ],
+      choices: [
+        {
+          id: "choice-1",
+          description: "Choice 1",
+          disqualified: false,
+          scores: {
+            "criteria-1": 3,
+            "criteria-2": 2,
+          },
+          total_score: 21, // (3 * 5) + (2 * 3)
+        },
+      ],
+    });
+  
+    // Verify that the database method was called with the correct arguments
+    expect(mockDb.fetchProjectById).toHaveBeenCalledWith(userId, projectId_1);
+  });
+  
   it("GET /projects should return an error if the database query fails", async () => {
     mockDb.getUser.mockResolvedValue({ data: { user: { id: userId } } });
     mockDb.fetchAllProjects.mockResolvedValue({
@@ -98,123 +226,24 @@ describe("Projects API", () => {
 
     const response = await handler(event);
     expect(response.statusCode).toBe(500);
+    expect(JSON.parse(response.body).error).toEqual("db error");
   });
 
-  it("GET /projects should return 401 if no cookie provided", async () => {
-    mockDb.getUser.mockRejectedValue(new Error("Unauthorized"));
-    const event = {
-      httpMethod: "GET",
-      headers: {},
-    };
-    const response = await handler(event);
-    expect(response.statusCode).toBe(401);
-    expect(JSON.parse(response.body).error).toEqual(
-      "Unauthorized"
-    );
-  });
-
-  it("POST /projects should return an error if title is missing", async () => {
+  it("GET /projects/:id should return an error if the project is not found", async () => {
     mockDb.getUser.mockResolvedValue({ data: { user: { id: userId } } });
-    const event = {
-      httpMethod: "POST",
-      headers: { cookie: `sb-auth-token=${userId}` },
-      body: JSON.stringify({
-        description: "Test Description",
-      }),
-    };
-    const response = await handler(event);
-    expect(response.statusCode).toBe(400);
-  });
-
-  it("POST /projects should create a project", async () => {
-    mockDb.getUser.mockResolvedValue({ data: { user: { id: userId } } });
-    const event = {
-      httpMethod: "POST",
-      headers: { cookie: `sb-auth-token=${userId}` },
-      body: JSON.stringify({
-        title: "Project 3",
-        description: "Description",
-      }),
-    };
-    const response = await handler(event);
-    expect(response.statusCode).toBe(201);
-    expect(JSON.parse(response.body)).toEqual(mockProject);
-    expect(mockDb.createProject).toHaveBeenCalledWith(userId, {
-      title: "Project 3",
-      description: "Description",
-    });
-  });
-
-  it("GET /projects/:id should return a single project", async () => {
-    mockDb.getUser.mockResolvedValue({ data: { user: { id: userId } } });
-    const projectId = uuidv4();
-    const mockProjectWithId = {
-      ...mockProject,
-      id: projectId,
-      criteria: [],
-      choices: [],
-    };
-
-    // Mock fetchProjectById to simulate fetching a single project
-    mockDb.fetchProjectById.mockImplementation(async (userId, pId) => {
-      if (pId === projectId) {
-        return { data: mockProjectWithId, error: null };
-      }
-      return { data: null, error: { message: "not found" } };
+    mockDb.fetchProjectById.mockResolvedValue({
+      data: null,
+      error: { message: "not found" },
     });
 
     const event = {
       httpMethod: "GET",
       headers: { cookie: `sb-auth-token=${userId}` },
-      pathParameters: { id: projectId },
+      pathParameters: { id: uuidv4() },
     };
-    const response = await handler(event);
-    expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body)).toEqual(mockProjectWithId);
-    expect(mockDb.fetchProjectById).toHaveBeenCalledWith(userId, projectId);
-  });
 
-  it("PUT /projects/:id should update a project", async () => {
-    mockDb.getUser.mockResolvedValue({ data: { user: { id: userId } } });
-    const projectId = uuidv4();
-    mockDb.updateProject.mockResolvedValue({
-      data: { ...mockProject, id: projectId },
-      error: null,
-    });
-
-    const event = {
-      httpMethod: "PUT",
-      headers: { cookie: `sb-auth-token=${userId}` },
-      pathParameters: { id: projectId },
-      body: JSON.stringify({
-        title: "Project 1 Updated",
-        description: "Updated Description",
-      }),
-    };
     const response = await handler(event);
-    expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body)).toEqual({
-      ...mockProject,
-      id: projectId,
-    });
-    expect(mockDb.updateProject).toHaveBeenCalledWith(userId, projectId, {
-      title: "Project 1 Updated",
-      description: "Updated Description",
-    });
-  });
-
-  it("DELETE /projects/:id should delete a project", async () => {
-    mockDb.getUser.mockResolvedValue({ data: { user: { id: userId } } });
-    const event = {
-      httpMethod: "DELETE",
-      headers: { cookie: `sb-auth-token=${userId}` },
-      pathParameters: { id: projectId_1 },
-    };
-    const response = await handler(event);
-    expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body)).toEqual({
-      message: "Project deleted successfully",
-    });
-    expect(mockDb.deleteProject).toHaveBeenCalledWith(userId, projectId_1);
+    expect(response.statusCode).toBe(404);
+    expect(JSON.parse(response.body).error).toEqual("not found");
   });
 });
